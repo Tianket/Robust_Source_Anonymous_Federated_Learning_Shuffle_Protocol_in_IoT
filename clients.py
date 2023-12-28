@@ -7,12 +7,14 @@ from getData import GetDataSet
 
 
 class client(object):
-    def __init__(self, trainDataSet, public_parameter, dev):
+    def __init__(self, trainDataSet, public_parameter, dev, xi, param):
         self.train_ds = trainDataSet
         self.dev = dev
         self.train_dl = None
         self.local_parameters = None
         self.public_parameter = public_parameter # uj, not g ** uj
+        self.ski = xi
+        self.pki = param['g'] ** xi
 
     def localUpdate(self, localEpoch, localBatchSize, Net, lossFun, opti, global_parameters):
         Net.load_state_dict(global_parameters, strict=True)
@@ -53,16 +55,16 @@ class client(object):
 
 
 class ClientsGroup(object):
-    def __init__(self, dataSetName, isIID, numOfClients, dev):
+    def __init__(self, dataSetName, isIID, numOfClients, dev, Zp, param):
         self.data_set_name = dataSetName
         self.is_iid = isIID
         self.num_of_clients = numOfClients
         self.dev = dev
         self.clients_set = {}
-
         self.test_data_loader = None
-
         self.dataSetBalanceAllocation()
+        self.Zp = Zp
+        self.param = param
 
     def dataSetBalanceAllocation(self):
         mnistDataSet = GetDataSet(self.data_set_name, self.is_iid)
@@ -85,7 +87,7 @@ class ClientsGroup(object):
             label_shards2 = train_label[shards_id2 * shard_size: shards_id2 * shard_size + shard_size]
             local_data, local_label = np.vstack((data_shards1, data_shards2)), np.vstack((label_shards1, label_shards2))
             local_label = np.argmax(local_label, axis=1)
-            someone = client(TensorDataset(torch.tensor(local_data), torch.tensor(local_label)), random.uniform(0, 100) ,self.dev)
+            someone = client(TensorDataset(torch.tensor(local_data), torch.tensor(local_label)), random.uniform(0, 100), self.dev, random.choice(self.Zp), self.param)
             self.clients_set['client{}'.format(i)] = someone
 
 if __name__=="__main__":

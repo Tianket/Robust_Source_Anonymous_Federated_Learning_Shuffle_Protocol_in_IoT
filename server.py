@@ -90,7 +90,7 @@ if __name__ == "__main__":
     loss_func = F.cross_entropy
     opti = optim.SGD(net.parameters(), lr=args['learning_rate'])
 
-    int Zp*
+    int Zp
     pass
 
     param = generate_params()
@@ -98,7 +98,7 @@ if __name__ == "__main__":
     skp =
     pkp = param['g'] ** skp
 
-    myClients = ClientsGroup('mnist', args['IID'], args['num_of_participants'], dev)
+    myClients = ClientsGroup('mnist', args['IID'], args['num_of_participants'], dev, Zp, param)
     testDataLoader = myClients.test_data_loader
 
     Np = int(max(args['num_of_participants'] * args['cfraction'], 1)) # number in communication
