@@ -6,15 +6,19 @@ from torch.utils.data import DataLoader
 from getData import GetDataSet
 
 
-class client(object):
-    def __init__(self, trainDataSet, public_parameter, dev, xi, param):
+class Clients(object):
+    k_positions = None
+    clients_in_comm = []
+    clients_set = {}
+
+    def __init__(self, trainDataSet, public_parameter, dev, xi):
         self.train_ds = trainDataSet
         self.dev = dev
         self.train_dl = None
         self.local_parameters = None
         self.public_parameter = public_parameter # uj, not g ** uj
         self.ski = xi
-        self.pki = param['g'] ** xi
+        self.pki = ClientsGroup.param['g'] ** xi
 
     def localUpdate(self, localEpoch, localBatchSize, Net, lossFun, opti, global_parameters):
         Net.load_state_dict(global_parameters, strict=True)
@@ -31,22 +35,28 @@ class client(object):
         return Net.state_dict()
 
 
-    def takeOutFromRequestCollection(self, amount):
-            elements_to_remove = random.sample(self.request_collection_Lch, amount)
+    def takeOutFromRequestCollection(self, request_collection):
+            elements_to_remove = random.sample(request_collection, random.randint(1, Clients.k_positions))
             for element in elements_to_remove:
-                self.request_collection_Lch.remove(element)
-            return elements_to_remove
+                request_collection.remove(element)
+            return elements_to_remove, request_collection
 
-    def round1_firstClient(self, num_of_participants, k_positions, param, total_public_parameters):
-        self.request_collection_Lch = list(range(1, num_of_participants * k_positions + 1))
-        request_parameters = self.takeOutFromRequestCollection(random.uniform(1, k_positions))
+    def round1_firstClient(self):
+        request_collection = list(range(1, k_positions * Clients.clients_in_comm + 1))
 
-        b = random.uniform(1, 50)
-        timestep = param['g'] ** (b * total_public_parameters)
+        request_parameters, request_collection = self.takeOutFromRequestCollection(request_collection)
+        b = random.randint(1, 50) # b belongs to set Z
+        total_public_parameters = 0
+        for each_client in Clients.clients_in_comm:
+            total_public_parameters += Clients.clients_set[each_client].public_parameter
+
+        timestep = param['g'] ** (b * (total_public_parameters - self.public_parameter))
 
 
-    def round1_otherClients:
+    def round1_otherClients(self):
 
+    def round1(self):
+        self.round1_firstClient()
 
 
     def local_val(self):
@@ -54,8 +64,14 @@ class client(object):
 
 
 
-class ClientsGroup(object):
-    def __init__(self, dataSetName, isIID, numOfClients, dev, Zp, param):
+
+
+
+
+
+class ClientsGenerator(object):
+
+    def __init__(self, dataSetName, isIID, numOfClients, dev):
         self.data_set_name = dataSetName
         self.is_iid = isIID
         self.num_of_clients = numOfClients
@@ -63,8 +79,7 @@ class ClientsGroup(object):
         self.clients_set = {}
         self.test_data_loader = None
         self.dataSetBalanceAllocation()
-        self.Zp = Zp
-        self.param = param
+
 
     def dataSetBalanceAllocation(self):
         mnistDataSet = GetDataSet(self.data_set_name, self.is_iid)
@@ -87,8 +102,11 @@ class ClientsGroup(object):
             label_shards2 = train_label[shards_id2 * shard_size: shards_id2 * shard_size + shard_size]
             local_data, local_label = np.vstack((data_shards1, data_shards2)), np.vstack((label_shards1, label_shards2))
             local_label = np.argmax(local_label, axis=1)
-            someone = client(TensorDataset(torch.tensor(local_data), torch.tensor(local_label)), random.uniform(0, 100), self.dev, random.choice(self.Zp), self.param)
+            someone = Clients(TensorDataset(torch.tensor(local_data), torch.tensor(local_label)), random.randint(0, 100), self.dev, random.choice(self.Zp), self.param)
             self.clients_set['client{}'.format(i)] = someone
+
+    def getClients(self):
+        return self.clients_set
 
 if __name__=="__main__":
     MyClients = ClientsGroup('mnist', True, 100, 1)

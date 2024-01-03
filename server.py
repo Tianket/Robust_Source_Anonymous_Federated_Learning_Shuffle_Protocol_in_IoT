@@ -6,7 +6,7 @@ import torch
 import torch.nn.functional as F
 from torch import optim
 from Models import Mnist_2NN, Mnist_CNN
-from clients import ClientsGroup, client
+from clients import ClientsGenerator, Clients
 from sympy import isprime
 import random
 
@@ -95,13 +95,18 @@ if __name__ == "__main__":
 
     param = generate_params()
     total_positions = args['num_of_participants'] * args['k_positions']
+    Clients.k_positions = args['k_positions']
+
     skp =
     pkp = param['g'] ** skp
 
-    myClients = ClientsGroup('mnist', args['IID'], args['num_of_participants'], dev, Zp, param)
+    myClients = ClientsGenerator('mnist', args['IID'], args['num_of_participants'], dev)
     testDataLoader = myClients.test_data_loader
+    clients_set = myClients.getClients()
+    Clients.clients_set = clients_set
 
     Np = int(max(args['num_of_participants'] * args['cfraction'], 1)) # number in communication
+
 
     global_parameters = {}
     for key, var in net.state_dict().items(): # 将net中的参数保存在字典中（是参数，不是训练梯度）
@@ -122,21 +127,22 @@ if __name__ == "__main__":
     for i in range(args['num_comm']):
         print("communicate round {}".format(i+1))
 
-        order = np.random.permutation(args['num_of_participants'])
+        order = np.random.permutation(args['num_of_participants']) # Shuffle the clients
         clients_in_comm = ['client{}'.format(i) for i in order[0:Np]]
-        random.shuffle(clients_in_comm)
-
+        Clients.clients_in_comm = clients_in_comm # Send to all clients
 
         '''=====数据位置生成阶段====='''
         Pi = clients_in_comm[0]
 
-        total_public_parameters = 0
+        clients_set[Pi].round1_firstClient(arg['k_positions'])
+
+        '''total_public_parameters = 0
         for client in clients_in_comm[1:]:
             total_public_parameters += myClients.clients_set[client].public_paramter
 
         for client in tqdm(clients_in_comm):
             myClients.clients_set[client].round1_firstClient(args['num_of_participants'], arg['k_positions'], param, total_public_parameters)
-
+'''
 
         sum_parameters = None
         for client in tqdm(clients_in_comm):
