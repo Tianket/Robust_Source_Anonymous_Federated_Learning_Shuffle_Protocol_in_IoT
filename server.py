@@ -6,9 +6,10 @@ import torch
 import torch.nn.functional as F
 from torch import optim
 from Models import Mnist_2NN, Mnist_CNN
-from clients import ClientsGenerator, Clients
+from clients import ClientsGroup, Clients
 from sympy import isprime
 import random
+
 
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter, description="FedAvg")
@@ -49,6 +50,21 @@ def generate_params():
     a = random.choice(list(G))
 
     return {"G": G, "g": g, "h": h, "p": p, "a": a}
+
+def elgamalEncryption(secret, pubilc_key):
+    k = random.randint(1, 500)
+    c1 = param['g']
+    c2 = (pubilc_key ** k) * secret
+
+    return [c1, c2]
+
+
+
+def elgamalDecryption(messages, private_key):
+    c1, c2 = messages[0], messages[1]
+
+    return c2 * (c1 ** (-private_key))
+
 '''
 from Crypto.PublicKey import ECC
 from Crypto.Random import get_random_bytes
@@ -94,13 +110,15 @@ if __name__ == "__main__":
     pass
 
     param = generate_params()
+    Clients.param = param
+
     total_positions = args['num_of_participants'] * args['k_positions']
     Clients.k_positions = args['k_positions']
 
     skp =
     pkp = param['g'] ** skp
 
-    myClients = ClientsGenerator('mnist', args['IID'], args['num_of_participants'], dev)
+    myClients = ClientsGroup('mnist', args['IID'], args['num_of_participants'], dev)
     testDataLoader = myClients.test_data_loader
     clients_set = myClients.getClients()
     Clients.clients_set = clients_set
@@ -132,17 +150,13 @@ if __name__ == "__main__":
         Clients.clients_in_comm = clients_in_comm # Send to all clients
 
         '''=====数据位置生成阶段====='''
+        # Round 1
         Pi = clients_in_comm[0]
+        myClients.round1(Pi)
 
-        clients_set[Pi].round1_firstClient(arg['k_positions'])
+        # Round 2
 
-        '''total_public_parameters = 0
-        for client in clients_in_comm[1:]:
-            total_public_parameters += myClients.clients_set[client].public_paramter
 
-        for client in tqdm(clients_in_comm):
-            myClients.clients_set[client].round1_firstClient(args['num_of_participants'], arg['k_positions'], param, total_public_parameters)
-'''
 
         sum_parameters = None
         for client in tqdm(clients_in_comm):
