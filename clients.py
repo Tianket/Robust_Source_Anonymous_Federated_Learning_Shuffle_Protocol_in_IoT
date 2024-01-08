@@ -21,6 +21,7 @@ class Clients(object):
         self.client_private_key = xi # ski
         self.client_public_key = Clients.param['g'] ** xi # pki
 
+        self.request_parameters = []
         self.whether_picked_in_round1 = False
 
     def localUpdate(self, localEpoch, localBatchSize, Net, lossFun, opti, global_parameters):
@@ -49,10 +50,12 @@ class Clients(object):
         self.whether_picked_in_round1 = True
 
         # i
-        request_collection = list(range(1, k_positions * Clients.clients_in_comm + 1))
+        request_collection = list(range(1, Clients.k_positions * len(Clients.clients_in_comm) + 1))
 
         # ii
         request_parameters, request_collection = self.takeOutFromRequestCollection(request_collection)
+        self.request_parameters = request_parameters
+
         b = random.randint(1, 50) # b belongs to set Z
         total_public_parameters = 0
         for each_client in Clients.clients_in_comm:
@@ -86,7 +89,7 @@ class Clients(object):
             request_collection.append(decrypted_element)
 
         request_parameters, request_collection = self.takeOutFromRequestCollection(request_collection)
-
+        self.request_parameters = request_parameters
         # iii
         timestep = timestep / gb ** self.public_parameter
 
@@ -107,8 +110,17 @@ class Clients(object):
             return each_client, [encrypted_request_collection, timestep, gb]
 
 
-    def local_val(self):
-        pass
+    def getTokenAndVerificationInformation(self):
+        temp_sum = sum([element+Clients.param['a'] for element in self.request_parameters])
+        k_plus_Np = Clients.k_positions * len(Clients.clients_in_comm)
+        temp_exponent = Clients.param['a'] ** (k_plus_Np - len(self.request_parameters))
+
+        # OT.Token
+        token = Clients.param['g'] ** (self.client_private_key / temp_sum) # Toki
+        verification_information = Clients.param['h'] ** ((temp_sum * temp_exponent) / self.client_private_key) # hi
+
+        return token, verification_information, len(self.request_parameters)
+
 
 
 
