@@ -9,7 +9,7 @@ from Models import Mnist_2NN, Mnist_CNN
 from clients import ClientsGroup, Clients
 from sympy import isprime
 import random
-
+from cryptography.hazmat.primitives.asymmetric import ec
 
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter, description="FedAvg")
@@ -35,7 +35,7 @@ parser.add_argument('-iid', '--IID', type=int, default=0, help='the way to alloc
 def test_mkdir(path):
     if not os.path.isdir(path):
         os.mkdir(path)
-
+'''
 def generate_params():
     # Select a large prime number for p
     p = None
@@ -51,6 +51,15 @@ def generate_params():
 
     return {"G": G, "g": g, "h": h, "p": p, "a": a}
 
+'''
+
+def generate_params():
+    curve = ec.SECP384R1()
+
+
+
+
+
 def elgamalEncryption(secret, pubilc_key):
     k = random.randint(1, 500)
     c1 = param['g']
@@ -65,23 +74,6 @@ def elgamalDecryption(messages, private_key):
 
     return c2 * (c1 ** (-private_key))
 
-'''
-from Crypto.PublicKey import ECC
-from Crypto.Random import get_random_bytes
-import Crypto.Util.number as number
-
-# 生成一个椭圆曲线密钥对，用于获取群 G 和元素 g
-key = ECC.generate(curve='P-256')
-G = key._curve  # 椭圆曲线群
-g = key.pointQ  # 群 G 中的一个元素
-
-# 生成素数 p 和模 p 的乘法群 Z*p 中的元素 a
-p = number.getPrime(256)  # 生成一个 256 位的素数
-a = number.getRandomRange(1, p)  # 获取一个小于 p 的随机数
-
-# 将参数打包
-param = {'G': G, 'g': g, 'p': p, 'a': a}
-'''
 
 if __name__ == "__main__":
     args = parser.parse_args()
@@ -106,7 +98,7 @@ if __name__ == "__main__":
     loss_func = F.cross_entropy
     opti = optim.SGD(net.parameters(), lr=args['learning_rate'])
 
-    int Zp
+    Zp = []
     pass
 
     param = generate_params()
@@ -155,6 +147,29 @@ if __name__ == "__main__":
         myClients.round1(Pi)
 
         # Round 2
+        for each_client in clients_in_comm:
+            token, verification_information, amount_of_request_parameters = \
+                myClients.clients_set[each_client].getTokenAndVerificationInformation()
+            if 0:
+                pass # 双线性配对函数
+            else:
+                random_mask = random.choice(Zp)
+                # OT.Enc
+                secret_list = {}
+                for count in range(args['k_positions'] * Np):
+                    if count == 0:
+                        # C0
+                        secret_list[count] = token ** random_mask
+                    else:
+                        Cn =
+                        secret_list[count] = Cn
+
+                myClients.clients_set[each_client].setSecretList(secret_list)
+
+        '''=====数据匿名收集阶段====='''
+        # Round 1
+
+
 
 
 

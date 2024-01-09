@@ -24,6 +24,8 @@ class Clients(object):
         self.request_parameters = []
         self.whether_picked_in_round1 = False
 
+        self.secret_list = {}
+
     def localUpdate(self, localEpoch, localBatchSize, Net, lossFun, opti, global_parameters):
         Net.load_state_dict(global_parameters, strict=True)
         self.train_dl = DataLoader(self.train_ds, batch_size=localBatchSize, shuffle=True)
@@ -120,6 +122,16 @@ class Clients(object):
         verification_information = Clients.param['h'] ** ((temp_sum * temp_exponent) / self.client_private_key) # hi
 
         return token, verification_information, len(self.request_parameters)
+
+
+    def setSecretList(self, secret_list):
+        self.secret_list = secret_list
+
+    def decryptionSecret(self):
+        # OT.Dec
+        position_list = {}
+        for index in self.secret_list:
+            pass
 
 
 
