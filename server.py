@@ -1,14 +1,14 @@
 import os
 import argparse
 from tqdm import tqdm
+import random
 import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import optim
 from Models import Mnist_2NN, Mnist_CNN
 from clients import ClientsGroup, Clients
-from sympy import isprime
-import random
+from sympy import isprime, nextprime
 from cryptography.hazmat.primitives.asymmetric import ec
 
 
@@ -35,28 +35,24 @@ parser.add_argument('-iid', '--IID', type=int, default=0, help='the way to alloc
 def test_mkdir(path):
     if not os.path.isdir(path):
         os.mkdir(path)
-'''
-def generate_params():
-    # Select a large prime number for p
-    p = None
-    while not p or not isprime(p):
-        p = random.randint(1e9, 1e10)
-    # Define a group G as a set of integers for demonstration
-    G = set(range(1, p))
-    # Select random elements g and h from G
-    g = random.choice(list(G))
-    h = random.choice(list(G))
-    # Select a random element a from Z*p
-    a = random.choice(list(G))
 
-    return {"G": G, "g": g, "h": h, "p": p, "a": a}
-
-'''
 
 def generate_params():
     curve = ec.SECP384R1()
+    G = curve
 
+    g_private_key = ec.generate_private_key(curve)
+    g = g_private_key.public_key()
 
+    h_private_key = ec.generate_private_key(curve)
+    h = h_private_key.public_key()
+
+    random_start = ec.generate_private_key(curve).private_numbers().private_value
+    p = nextprime(random_start)
+
+    a = random.randint(1, p) # 这是因为当 p 是素数时，除了 0 以外的每个数都有乘法逆元
+
+    return {"G": G, "g": g, "h": h, "p": p, "a": a}
 
 
 
@@ -98,17 +94,12 @@ if __name__ == "__main__":
     loss_func = F.cross_entropy
     opti = optim.SGD(net.parameters(), lr=args['learning_rate'])
 
-    Zp = []
-    pass
-
+    # for clients.py
     param = generate_params()
-    Clients.param = param
+    k_positions = args['k_positions']
 
-    total_positions = args['num_of_participants'] * args['k_positions']
-    Clients.k_positions = args['k_positions']
-
-    skp =
-    pkp = param['g'] ** skp
+    private_key = random.randint(1, param['p'])
+    public_key = ec.derive_private_key(private_key, param['G'])
 
     myClients = ClientsGroup('mnist', args['IID'], args['num_of_participants'], dev)
     testDataLoader = myClients.test_data_loader
@@ -116,7 +107,6 @@ if __name__ == "__main__":
     Clients.clients_set = clients_set
 
     Np = int(max(args['num_of_participants'] * args['cfraction'], 1)) # number in communication
-
 
     global_parameters = {}
     for key, var in net.state_dict().items(): # 将net中的参数保存在字典中（是参数，不是训练梯度）
