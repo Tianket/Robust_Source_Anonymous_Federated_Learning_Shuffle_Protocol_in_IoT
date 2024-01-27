@@ -5,10 +5,9 @@ from torch.utils.data import TensorDataset
 from torch.utils.data import DataLoader
 from getData import GetDataSet
 from server import elgamalEncryption, elgamalDecryption
+from server import param, k_positions
 
 class Clients(object):
-    param = {}
-    k_positions = None
     clients_in_comm = []
     clients_set = {}
 
@@ -19,7 +18,7 @@ class Clients(object):
         self.local_parameters = None
         self.public_parameter = public_parameter # uj, not g ** uj
         self.client_private_key = xi # ski
-        self.client_public_key = Clients.param['g'] ** xi # pki
+        self.client_public_key = param['g'] ** xi # pki
 
         self.request_parameters = []
         self.whether_picked_in_round1 = False
@@ -42,7 +41,7 @@ class Clients(object):
 
 
     def takeOutFromRequestCollection(self, request_collection):
-            elements_to_remove = random.sample(request_collection, random.randint(1, Clients.k_positions))
+            elements_to_remove = random.sample(request_collection, random.randint(1, k_positions))
             for element in elements_to_remove:
                 request_collection.remove(element)
 
@@ -52,7 +51,7 @@ class Clients(object):
         self.whether_picked_in_round1 = True
 
         # i
-        request_collection = list(range(1, Clients.k_positions * len(Clients.clients_in_comm) + 1))
+        request_collection = list(range(1, k_positions * len(Clients.clients_in_comm) + 1))
 
         # ii
         request_parameters, request_collection = self.takeOutFromRequestCollection(request_collection)
@@ -63,7 +62,7 @@ class Clients(object):
         for each_client in Clients.clients_in_comm:
             total_public_parameters += Clients.clients_set[each_client].public_parameter
 
-        timestep = Clients.param['g'] ** (b * (total_public_parameters - self.public_parameter))
+        timestep = param['g'] ** (b * (total_public_parameters - self.public_parameter))
 
         # iii
         for each_client in Clients.clients_in_comm:
@@ -76,7 +75,7 @@ class Clients(object):
             encrypted_element = elgamalEncryption(element, next_client_public_key)
             encrypted_request_collection.append(encrypted_element)
 
-        return each_client, [encrypted_request_collection, timestep, Clients.param['g'] ** b]
+        return each_client, [encrypted_request_collection, timestep, param['g'] ** b]
 
     def round1_otherClients(self, encrypted_request_collection, timestep, gb):
         self.whether_picked_in_round1 = True
@@ -113,13 +112,13 @@ class Clients(object):
 
 
     def getTokenAndVerificationInformation(self):
-        temp_sum = sum([element+Clients.param['a'] for element in self.request_parameters])
-        k_plus_Np = Clients.k_positions * len(Clients.clients_in_comm)
-        temp_exponent = Clients.param['a'] ** (k_plus_Np - len(self.request_parameters))
+        temp_sum = sum([element+param['a'] for element in self.request_parameters])
+        k_plus_Np = k_positions * len(Clients.clients_in_comm)
+        temp_exponent = param['a'] ** (k_plus_Np - len(self.request_parameters))
 
         # OT.Token
-        token = Clients.param['g'] ** (self.client_private_key / temp_sum) # Toki
-        verification_information = Clients.param['h'] ** ((temp_sum * temp_exponent) / self.client_private_key) # hi
+        token = param['g'] ** (self.client_private_key / temp_sum) # Toki
+        verification_information = param['h'] ** ((temp_sum * temp_exponent) / self.client_private_key) # hi
 
         return token, verification_information, len(self.request_parameters)
 
