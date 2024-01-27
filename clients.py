@@ -1,13 +1,31 @@
 import numpy as np
 import torch
 import random
+from tqdm import tqdm
 from torch.utils.data import TensorDataset
 from torch.utils.data import DataLoader
 from getData import GetDataSet
-from server import elgamalEncryption, elgamalDecryption
-from server import param, k_positions
+
+
+def elgamalEncryption(secret, pubilc_key):
+    #pubilc_key = pubilc_key % Clients.param['p']
+    k = random.randint(1, 5)
+    c1 = Clients.param['g']
+    c2 = (pubilc_key ** k) * secret
+
+    return [c1, c2]
+
+
+def elgamalDecryption(messages, private_key):
+    c1, c2 = messages[0], messages[1]
+
+    return c2 * (c1 ** (-private_key))
+
+
 
 class Clients(object):
+    param = {}
+    k_positions = None
     clients_in_comm = []
     clients_set = {}
 
@@ -18,12 +36,15 @@ class Clients(object):
         self.local_parameters = None
         self.public_parameter = public_parameter # uj, not g ** uj
         self.client_private_key = xi # ski
-        self.client_public_key = param['g'] ** xi # pki
+        if Clients.param["b"] == "+":
+            self.client_public_key = Clients.param['g'] * xi
+        elif Clients.param["b"] == "*":
+            self.client_public_key = Clients.param['g'] ** xi
 
         self.request_parameters = []
         self.whether_picked_in_round1 = False
 
-        self.secret_list = {}
+        self.secret_list = []
 
     def localUpdate(self, localEpoch, localBatchSize, Net, lossFun, opti, global_parameters):
         Net.load_state_dict(global_parameters, strict=True)
@@ -41,17 +62,17 @@ class Clients(object):
 
 
     def takeOutFromRequestCollection(self, request_collection):
-            elements_to_remove = random.sample(request_collection, random.randint(1, k_positions))
-            for element in elements_to_remove:
-                request_collection.remove(element)
+        elements_to_remove = random.sample(request_collection, random.randint(1, Clients.k_positions))
+        for element in elements_to_remove:
+            request_collection.remove(element)
 
-            return elements_to_remove, request_collection
+        return elements_to_remove, request_collection
 
     def round1_firstClient(self):
         self.whether_picked_in_round1 = True
 
         # i
-        request_collection = list(range(1, k_positions * len(Clients.clients_in_comm) + 1))
+        request_collection = list(range(1, Clients.k_positions * len(Clients.clients_in_comm) + 1))
 
         # ii
         request_parameters, request_collection = self.takeOutFromRequestCollection(request_collection)
@@ -62,11 +83,16 @@ class Clients(object):
         for each_client in Clients.clients_in_comm:
             total_public_parameters += Clients.clients_set[each_client].public_parameter
 
-        timestep = param['g'] ** (b * (total_public_parameters - self.public_parameter))
+        if Clients.param["b"] == "+":
+            timestep = Clients.param['g'] * (b * (total_public_parameters - self.public_parameter))
+        elif Clients.param["b"] == "*":
+            timestep = Clients.param['g'] ** (b * (total_public_parameters - self.public_parameter))
+
 
         # iii
+        next_client_public_key = 0
         for each_client in Clients.clients_in_comm:
-            if Clients.clients_set[each_client].whether_picked_in_round1 = False:
+            if Clients.clients_set[each_client].whether_picked_in_round1 == False:
                 next_client_public_key = Clients.clients_set[each_client].client_public_key
                 break
 
@@ -75,7 +101,11 @@ class Clients(object):
             encrypted_element = elgamalEncryption(element, next_client_public_key)
             encrypted_request_collection.append(encrypted_element)
 
-        return each_client, [encrypted_request_collection, timestep, param['g'] ** b]
+        if Clients.param["b"] == "+":
+            return each_client, [encrypted_request_collection, timestep, Clients.param['g'] * b]
+        elif Clients.param["b"] == "*":
+            return each_client, [encrypted_request_collection, timestep, Clients.param['g'] ** b]
+
 
     def round1_otherClients(self, encrypted_request_collection, timestep, gb):
         self.whether_picked_in_round1 = True
@@ -92,16 +122,21 @@ class Clients(object):
         request_parameters, request_collection = self.takeOutFromRequestCollection(request_collection)
         self.request_parameters = request_parameters
         # iii
-        timestep = timestep / gb ** self.public_parameter
+        if Clients.param["b"] == "+":
+            timestep = timestep - gb * self.public_parameter
+        elif Clients.param["b"] == "*":
+            timestep = timestep / gb ** self.public_parameter
 
         # iv
-        if timestep == 1:
+        next_client_public_key = 0
+        if timestep == (0 if Clients.param["b"] == "+" else 1 if Clients.param["b"] == "*" else ""):
             return 0, 0
         else:
             for each_client in Clients.clients_in_comm:
-                if Clients.clients_set[each_client].whether_picked_in_round1 = False:
+                if not Clients.clients_set[each_client].whether_picked_in_round1:
                     next_client_public_key = Clients.clients_set[each_client].client_public_key
                     break
+
 
             encrypted_request_collection = []
             for element in request_collection:
@@ -112,13 +147,18 @@ class Clients(object):
 
 
     def getTokenAndVerificationInformation(self):
-        temp_sum = sum([element+param['a'] for element in self.request_parameters])
-        k_plus_Np = k_positions * len(Clients.clients_in_comm)
-        temp_exponent = param['a'] ** (k_plus_Np - len(self.request_parameters))
+        temp_sum = sum([element+Clients.param['a'] for element in self.request_parameters])
+        k_plus_Np = Clients.k_positions * len(Clients.clients_in_comm)
+        temp_exponent = Clients.param['a'] ** (k_plus_Np - len(self.request_parameters))
 
         # OT.Token
-        token = param['g'] ** (self.client_private_key / temp_sum) # Toki
-        verification_information = param['h'] ** ((temp_sum * temp_exponent) / self.client_private_key) # hi
+        if Clients.param["b"] == "+":
+            token = Clients.param['g'] * (self.client_private_key / temp_sum)  # Toki
+            verification_information = Clients.param['h'] * ((temp_sum * temp_exponent) / self.client_private_key)  # hi
+        elif Clients.param["b"] == "*":
+            token = Clients.param['g'] ** (self.client_private_key / temp_sum)  # Toki
+            verification_information = Clients.param['h'] ** ((temp_sum * temp_exponent) / self.client_private_key)  # hi
+
 
         return token, verification_information, len(self.request_parameters)
 
@@ -131,10 +171,6 @@ class Clients(object):
         position_list = {}
         for index in self.secret_list:
             pass
-
-
-
-
 
 
 
@@ -163,7 +199,7 @@ class ClientsGroup(object):
 
         shard_size = mnistDataSet.train_data_size // self.num_of_clients // 2
         shards_id = np.random.permutation(mnistDataSet.train_data_size // shard_size)
-        for i in range(self.num_of_clients):
+        for i in tqdm(range(self.num_of_clients)):
             shards_id1 = shards_id[i * 2]
             shards_id2 = shards_id[i * 2 + 1]
             data_shards1 = train_data[shards_id1 * shard_size: shards_id1 * shard_size + shard_size]
@@ -172,7 +208,8 @@ class ClientsGroup(object):
             label_shards2 = train_label[shards_id2 * shard_size: shards_id2 * shard_size + shard_size]
             local_data, local_label = np.vstack((data_shards1, data_shards2)), np.vstack((label_shards1, label_shards2))
             local_label = np.argmax(local_label, axis=1)
-            someone = Clients(TensorDataset(torch.tensor(local_data), torch.tensor(local_label)), random.randint(0, 100), self.dev, random.choice(self.Zp))
+            someone = Clients(TensorDataset(torch.tensor(local_data), torch.tensor(local_label)),
+                              random.randint(1, 3), self.dev, random.randint(1, Clients.param['p']))
             self.clients_set['client{}'.format(i)] = someone
 
     def getClients(self):

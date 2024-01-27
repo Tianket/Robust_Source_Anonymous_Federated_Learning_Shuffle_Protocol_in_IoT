@@ -2,22 +2,22 @@ import os
 import argparse
 from tqdm import tqdm
 import random
+import secrets
 import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import optim
-from Models import Mnist_2NN, Mnist_CNN
-from clients import ClientsGroup, Clients
 from sympy import isprime, nextprime
+from Models import Mnist_2NN, Mnist_CNN
 from cryptography.hazmat.primitives.asymmetric import ec
 
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter, description="FedAvg")
 parser.add_argument('-g', '--gpu', type=str, default='0', help='gpu id to use(e.g. 0,1,2,3)')
-parser.add_argument('-np', '--num_of_participants', type=int, default=100, help='numer of the clients')
-parser.add_argument('-kp', '--k_positions', type=int, default=10, help='number of positions that each participant can choose')
+parser.add_argument('-np', '--num_of_participants', type=int, default=30, help='numer of the clients')
+parser.add_argument('-kp', '--k_positions', type=int, default=2, help='number of positions that each participant can choose')
 
-parser.add_argument('-cf', '--cfraction', type=float, default=0.1, help='C fraction, 0 means 1 client, 1 means total clients')
+parser.add_argument('-cf', '--cfraction', type=float, default=0.9, help='C fraction, 0 means 1 client, 1 means total clients')
 parser.add_argument('-E', '--epoch', type=int, default=5, help='local train epoch')
 parser.add_argument('-B', '--batchsize', type=int, default=10, help='local train batch size')
 parser.add_argument('-mn', '--model_name', type=str, default='mnist_2nn', help='the model to train')
@@ -35,44 +35,25 @@ parser.add_argument('-iid', '--IID', type=int, default=0, help='the way to alloc
 def test_mkdir(path):
     if not os.path.isdir(path):
         os.mkdir(path)
-'''
-def generate_params():
-    # Select a large prime number for p
-    p = None
-    while not p or not isprime(p):
-        p = random.randint(1e9, 1e10)
-    # Define a group G as a set of integers for demonstration
-    G = set(range(1, p))
-    # Select random elements g and h from G
-    g = random.choice(list(G))
-    h = random.choice(list(G))
-    # Select a random element a from Z*p
-    a = random.choice(list(G))
-
-    return {"G": G, "g": g, "h": h, "p": p, "a": a}
-
-'''
 
 def generate_params():
-    curve = ec.SECP384R1()
+    binary_operator = "+"
+    #binary_operator = "*"
 
+    #random_bytes = secrets.token_bytes(1)
+    #random_number = int.from_bytes(random_bytes, byteorder='big')
+    random_number = random.randint(1,10)
+    p = nextprime(random_number)  # a large prime number
 
+    a = random.randint(1, p)
 
+    g = random.randint(2, 10)  # generator
 
+    G = list(set(range(0, 200, g))) # 假设二元运算符为乘法
 
-def elgamalEncryption(secret, pubilc_key):
-    k = random.randint(1, 500)
-    c1 = param['g']
-    c2 = (pubilc_key ** k) * secret
+    h = random.choice(G)
 
-    return [c1, c2]
-
-
-
-def elgamalDecryption(messages, private_key):
-    c1, c2 = messages[0], messages[1]
-
-    return c2 * (c1 ** (-private_key))
+    return {"G": G, "g": g, "h": h, "p": p, "a": a, "b": binary_operator}
 
 
 if __name__ == "__main__":
@@ -100,15 +81,24 @@ if __name__ == "__main__":
 
     # for clients.py
     param = generate_params()
-    k_positions = args['k_positions']
+    print("===== Params generation completed =====")
 
     private_key = random.randint(1, param['p'])
-    public_key = ec.derive_private_key(private_key, param['G'])
+    if param["b"] == "+":
+        public_key = param['g'] * private_key
+    elif param["b"] == "*":
+        public_key = param['g'] ** private_key
+    print("===== Keys generation completed =====")
+
+    from clients import ClientsGroup, Clients
+    Clients.param = param
+    Clients.k_positions = args['k_positions']
 
     myClients = ClientsGroup('mnist', args['IID'], args['num_of_participants'], dev)
     testDataLoader = myClients.test_data_loader
     clients_set = myClients.getClients()
     Clients.clients_set = clients_set
+    print("===== Clients generation completed =====")
 
     Np = int(max(args['num_of_participants'] * args['cfraction'], 1)) # number in communication
 
@@ -144,19 +134,36 @@ if __name__ == "__main__":
         for each_client in clients_in_comm:
             token, verification_information, amount_of_request_parameters = \
                 myClients.clients_set[each_client].getTokenAndVerificationInformation()
-            if 0:
-                pass # 双线性配对函数
+
+            k_plus_Np = args['k_positions'] * len(clients_in_comm)
+            temp_exponent = param['a'] ** (k_plus_Np - len(myClients.clients_set[each_client].request_parameters))
+
+            left_side = token * verification_information
+            if param["b"] == "+":
+                right_side = param['g'] * param['h'] * temp_exponent
+            elif param["b"] == "*":
+                right_side = param['g'] * param['h'] ** temp_exponent
+
+            if left_side != right_side: # 双线性配对函数 bilinear pairing function
+                continue
             else:
-                random_mask = random.choice(Zp)
+                random_mask = random.randint(1, param['p'])
                 # OT.Enc
-                secret_list = {}
+                secret_list = []
                 for count in range(args['k_positions'] * Np):
                     if count == 0:
                         # C0
-                        secret_list[count] = token ** random_mask
+                        if param["b"] == "+":
+                            secret_list.append(token * random_mask)
+                        elif param["b"] == "*":
+                            secret_list.append(token ** random_mask)
                     else:
-                        Cn =
-                        secret_list[count] = Cn
+                        # Cn
+                        if param["b"] == "+":
+                            secret_list.append(token * random_mask)
+                        elif param["b"] == "*":
+                            secret_list.append(token ** random_mask)
+
 
                 myClients.clients_set[each_client].setSecretList(secret_list)
 
