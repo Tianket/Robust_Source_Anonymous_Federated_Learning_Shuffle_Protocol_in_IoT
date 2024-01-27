@@ -5,6 +5,7 @@ import platform
 import pickle
 
 
+
 class GetDataSet(object):
     def __init__(self, dataSetName, isIID):
         self.name = dataSetName
@@ -24,8 +25,11 @@ class GetDataSet(object):
 
 
     def mnistDataSetConstruct(self, isIID):
-        data_dir = r'.\data\MNIST'
-        # data_dir = r'./data/MNIST'
+        os_name = platform.system()
+        if os_name == "Windows":
+            data_dir = r'.\data\MNIST'
+        else:
+            data_dir = r'./data/MNIST'
         train_images_path = os.path.join(data_dir, 'train-images-idx3-ubyte.gz')
         train_labels_path = os.path.join(data_dir, 'train-labels-idx1-ubyte.gz')
         test_images_path = os.path.join(data_dir, 't10k-images-idx3-ubyte.gz')
