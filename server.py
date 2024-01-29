@@ -56,6 +56,16 @@ def generate_params():
     return {"G": G, "g": g, "h": h, "p": p, "a": a, "b": binary_operator}
 
 
+
+def bilinear_pairing_function(a, b):
+    if param["b"] == "+":
+        result = param['g'] * (a * b)
+    elif param["b"] == "*":
+        result = param['g'] ** (a * b)
+
+    return result
+
+
 if __name__ == "__main__":
     args = parser.parse_args()
     args = args.__dict__
@@ -83,6 +93,9 @@ if __name__ == "__main__":
     param = generate_params()
     print("===== Params generation completed =====")
 
+    Np = int(max(args['num_of_participants'] * args['cfraction'], 1))  # number in communication
+    data_positions = list(range(1, args['k_positions'] * Np + 1))
+
     private_key = random.randint(1, param['p'])
     if param["b"] == "+":
         public_key = param['g'] * private_key
@@ -100,7 +113,6 @@ if __name__ == "__main__":
     Clients.clients_set = clients_set
     print("===== Clients generation completed =====")
 
-    Np = int(max(args['num_of_participants'] * args['cfraction'], 1)) # number in communication
 
     global_parameters = {}
     for key, var in net.state_dict().items(): # 将net中的参数保存在字典中（是参数，不是训练梯度）
@@ -119,7 +131,7 @@ if __name__ == "__main__":
         global_parameters[key] = var.clone()  # clone原来的参数，并且支持梯度回溯
 
     for i in range(args['num_comm']):
-        print("communicate round {}".format(i+1))
+        print("Communicate round {}".format(i+1))
 
         order = np.random.permutation(args['num_of_participants']) # Shuffle the clients
         clients_in_comm = ['client{}'.format(i) for i in order[0:Np]]
@@ -138,11 +150,11 @@ if __name__ == "__main__":
             k_plus_Np = args['k_positions'] * len(clients_in_comm)
             temp_exponent = param['a'] ** (k_plus_Np - len(myClients.clients_set[each_client].request_parameters))
 
-            left_side = token * verification_information
+            left_side = bilinear_pairing_function(token, verification_information)
             if param["b"] == "+":
-                right_side = param['g'] * param['h'] * temp_exponent
+                right_side = bilinear_pairing_function(param['g'], param['h'] * temp_exponent)
             elif param["b"] == "*":
-                right_side = param['g'] * param['h'] ** temp_exponent
+                right_side = bilinear_pairing_function(param['g'], param['h'] ** temp_exponent)
 
             if left_side != right_side: # 双线性配对函数 bilinear pairing function
                 continue
@@ -150,7 +162,7 @@ if __name__ == "__main__":
                 random_mask = random.randint(1, param['p'])
                 # OT.Enc
                 secret_list = []
-                for count in range(args['k_positions'] * Np):
+                for count in range(args['k_positions'] * Np): # count == n
                     if count == 0:
                         # C0
                         if param["b"] == "+":
@@ -160,10 +172,12 @@ if __name__ == "__main__":
                     else:
                         # Cn
                         if param["b"] == "+":
-                            secret_list.append(token * random_mask)
+                            secret_list.append(bilinear_pairing_function(param['g'] * (1 / (param['a'] + count)),
+                                                                         random_mask * ['h']) * data_positions[count])
                         elif param["b"] == "*":
-                            secret_list.append(token ** random_mask)
-
+                            secret_list.append(bilinear_pairing_function(param['g'] ** (1 / (param['a'] + count)),
+                                                                         random_mask * ['h']) * data_positions[count])
+                    count += 1
 
                 myClients.clients_set[each_client].setSecretList(secret_list)
 

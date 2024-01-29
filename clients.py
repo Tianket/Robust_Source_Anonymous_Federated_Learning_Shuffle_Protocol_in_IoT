@@ -5,6 +5,7 @@ from tqdm import tqdm
 from torch.utils.data import TensorDataset
 from torch.utils.data import DataLoader
 from getData import GetDataSet
+from server import bilinear_pairing_function
 
 
 def elgamalEncryption(secret, pubilc_key):
@@ -45,6 +46,7 @@ class Clients(object):
         self.whether_picked_in_round1 = False
 
         self.secret_list = []
+        self.position_list = []
 
     def localUpdate(self, localEpoch, localBatchSize, Net, lossFun, opti, global_parameters):
         Net.load_state_dict(global_parameters, strict=True)
@@ -165,12 +167,22 @@ class Clients(object):
 
     def setSecretList(self, secret_list):
         self.secret_list = secret_list
+        self.decryptionSecret()
 
     def decryptionSecret(self):
         # OT.Dec
-        position_list = {}
-        for index in self.secret_list:
-            pass
+        self.position_list = []
+        count = 1
+        for Cn in self.secret_list[1:]:
+            temp_sum = sum([element + Clients.param['a'] for element in self.request_parameters])
+            if Clients.param["b"] == "+":
+                sn = Cn * bilinear_pairing_function((-1 / self.client_private_key) * self.secret_list[0],
+                                                    Clients.param['h'] * (temp_sum / (Clients.param['a'] + count)))
+            elif Clients.param["b"] == "*":
+                sn = Cn * bilinear_pairing_function((-1 / self.client_private_key) * self.secret_list[0],
+                                                    Clients.param['h'] ** (temp_sum / (Clients.param['a'] + count)))
+            self.position_list.append(sn)
+            count += 1
 
 
 
