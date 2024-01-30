@@ -5,8 +5,17 @@ from tqdm import tqdm
 from torch.utils.data import TensorDataset
 from torch.utils.data import DataLoader
 from getData import GetDataSet
-from server import bilinear_pairing_function
 
+
+
+def bilinear_pairing_function(a, b):
+
+    if Clients.param["b"] == "+":
+        result = Clients.param['g'] * (a * b)
+    elif Clients.param["b"] == "*":
+        result = Clients.param['g'] ** (a * b)
+
+    return result
 
 def elgamalEncryption(secret, pubilc_key):
     #pubilc_key = pubilc_key % Clients.param['p']

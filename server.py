@@ -47,23 +47,13 @@ def generate_params():
 
     a = random.randint(1, p)
 
-    g = random.randint(2, 10)  # generator
+    g = random.randint(2, 5)  # generator
 
     G = list(set(range(0, 200, g))) # 假设二元运算符为乘法
 
     h = random.choice(G)
 
     return {"G": G, "g": g, "h": h, "p": p, "a": a, "b": binary_operator}
-
-
-
-def bilinear_pairing_function(a, b):
-    if param["b"] == "+":
-        result = param['g'] * (a * b)
-    elif param["b"] == "*":
-        result = param['g'] ** (a * b)
-
-    return result
 
 
 if __name__ == "__main__":
@@ -101,9 +91,8 @@ if __name__ == "__main__":
         public_key = param['g'] * private_key
     elif param["b"] == "*":
         public_key = param['g'] ** private_key
-    print("===== Keys generation completed =====")
 
-    from clients import ClientsGroup, Clients
+    from clients import ClientsGroup, Clients, bilinear_pairing_function
     Clients.param = param
     Clients.k_positions = args['k_positions']
 
@@ -173,16 +162,22 @@ if __name__ == "__main__":
                         # Cn
                         if param["b"] == "+":
                             secret_list.append(bilinear_pairing_function(param['g'] * (1 / (param['a'] + count)),
-                                                                         random_mask * ['h']) * data_positions[count])
+                                                                         random_mask * param['h']) * data_positions[count])
                         elif param["b"] == "*":
                             secret_list.append(bilinear_pairing_function(param['g'] ** (1 / (param['a'] + count)),
-                                                                         random_mask * ['h']) * data_positions[count])
+                                                                         random_mask * param['h']) * data_positions[count])
                     count += 1
 
                 myClients.clients_set[each_client].setSecretList(secret_list)
 
         '''=====数据匿名收集阶段====='''
         # Round 1
+        for client in tqdm(clients_in_comm):
+            local_parameters = myClients.clients_set[client].localUpdate(args['epoch'], args['batchsize'], net,
+                                                                         loss_func, opti, global_parameters)
+            for i in local_parameters:
+                #print(i,local_parameters[i])
+                pass
 
 
 
