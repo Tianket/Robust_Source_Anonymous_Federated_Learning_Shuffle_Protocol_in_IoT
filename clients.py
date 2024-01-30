@@ -44,6 +44,8 @@ class Clients(object):
         self.dev = dev
         self.train_dl = None
         self.local_parameters = None
+
+        '''=====Stage 1====='''
         self.public_parameter = public_parameter # uj, not g ** uj
         self.client_private_key = xi # ski
         if Clients.param["b"] == "+":
@@ -51,11 +53,17 @@ class Clients(object):
         elif Clients.param["b"] == "*":
             self.client_public_key = Clients.param['g'] ** xi
 
+        '''=====Stage 2====='''
         self.request_parameters = []
         self.whether_picked_in_round1 = False
 
         self.secret_list = []
         self.position_list = []
+
+        '''=====Stage 3====='''
+        self.anonymous_model_upload_list = []
+
+
 
     def localUpdate(self, localEpoch, localBatchSize, Net, lossFun, opti, global_parameters):
         Net.load_state_dict(global_parameters, strict=True)
@@ -192,6 +200,34 @@ class Clients(object):
                                                     Clients.param['h'] ** (temp_sum / (Clients.param['a'] + count)))
             self.position_list.append(sn)
             count += 1
+
+
+    def AnonymousModelUploadListGeneration(self, global_parameters, local_parameters):
+        def tensorMultiplication(dict, multiplier):
+            new_dict = {}
+            for key in dict:
+                new_dict[key] = dict[key] * multiplier
+            return new_dict
+
+        model_mask = random.randint(1, Clients.param['p'])
+        random_position = random.choice(self.position_list)
+
+        self.anonymous_model_upload_list = []
+        for count in range(1, Clients.k_positions * len(Clients.clients_in_comm) + 1):
+            if count == random_position:
+                if Clients.param["b"] == "+":
+                    item = tensorMultiplication(local_parameters, Clients.param['g'] * (model_mask + count))
+                elif Clients.param["b"] == "*":
+                    item = tensorMultiplication(local_parameters, Clients.param['g'] ** (model_mask + count))
+            else:
+                if Clients.param["b"] == "+":
+                    item = tensorMultiplication(global_parameters, Clients.param['g'] * (model_mask + count))
+                elif Clients.param["b"] == "*":
+                    item = tensorMultiplication(global_parameters, Clients.param['g'] ** (model_mask + count))
+            self.anonymous_model_upload_list.append(item)
+
+
+
 
 
 

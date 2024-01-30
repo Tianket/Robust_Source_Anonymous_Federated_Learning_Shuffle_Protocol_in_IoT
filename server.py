@@ -9,7 +9,6 @@ import torch.nn.functional as F
 from torch import optim
 from sympy import isprime, nextprime
 from Models import Mnist_2NN, Mnist_CNN
-from cryptography.hazmat.primitives.asymmetric import ec
 
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter, description="FedAvg")
@@ -30,6 +29,7 @@ parser.add_argument('-dr', '--drop_rate', type=float, default=0.1, help='drop ra
 
 parser.add_argument('-sp', '--save_path', type=str, default='./checkpoints', help='the saving path of checkpoints')
 parser.add_argument('-iid', '--IID', type=int, default=0, help='the way to allocate data to clients')
+
 
 
 def test_mkdir(path):
@@ -146,6 +146,7 @@ if __name__ == "__main__":
                 right_side = bilinear_pairing_function(param['g'], param['h'] ** temp_exponent)
 
             if left_side != right_side: # 双线性配对函数 bilinear pairing function
+                print(111111111111)
                 continue
             else:
                 random_mask = random.randint(1, param['p'])
@@ -170,14 +171,26 @@ if __name__ == "__main__":
 
                 myClients.clients_set[each_client].setSecretList(secret_list)
 
+        '''for client in tqdm(clients_in_comm):
+            if myClients.clients_set[client].secret_list == []:
+                print(True)
+            else:
+                print(False)'''
+
         '''=====数据匿名收集阶段====='''
         # Round 1
         for client in tqdm(clients_in_comm):
             local_parameters = myClients.clients_set[client].localUpdate(args['epoch'], args['batchsize'], net,
                                                                          loss_func, opti, global_parameters)
+            print(myClients.clients_set[client].position_list)
+            myClients.clients_set[client].AnonymousModelUploadListGeneration(global_parameters, local_parameters)
+
+
+
+
             for i in local_parameters:
-                #print(i,local_parameters[i])
                 pass
+
 
 
 
