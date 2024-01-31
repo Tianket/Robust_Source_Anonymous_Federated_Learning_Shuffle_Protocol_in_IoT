@@ -1,4 +1,5 @@
 import os
+import sys
 import argparse
 from tqdm import tqdm
 import random
@@ -9,7 +10,6 @@ import torch.nn.functional as F
 from torch import optim
 from sympy import isprime, nextprime
 from Models import Mnist_2NN, Mnist_CNN
-
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter, description="FedAvg")
 parser.add_argument('-g', '--gpu', type=str, default='0', help='gpu id to use(e.g. 0,1,2,3)')
@@ -26,6 +26,7 @@ parser.add_argument('-vf', "--val_freq", type=int, default=5, help="model valida
 parser.add_argument('-sf', '--save_freq', type=int, default=20, help='global model save frequency(of communication)')
 parser.add_argument('-ncomm', '--num_comm', type=int, default=1000, help='number of communications')
 parser.add_argument('-dr', '--drop_rate', type=float, default=0.1, help='drop rate')
+parser.add_argument('-t', '--threshold', type=float, default=15, help='the minimum number of hosts that can complete the iteration')
 
 parser.add_argument('-sp', '--save_path', type=str, default='./checkpoints', help='the saving path of checkpoints')
 parser.add_argument('-iid', '--IID', type=int, default=0, help='the way to allocate data to clients')
@@ -40,20 +41,26 @@ def generate_params():
     binary_operator = "+"
     #binary_operator = "*"
 
-    #random_bytes = secrets.token_bytes(1)
-    #random_number = int.from_bytes(random_bytes, byteorder='big')
-    random_number = random.randint(1,10)
+    random_bytes = secrets.token_bytes(2)
+    random_number = int.from_bytes(random_bytes, byteorder='big')
     p = nextprime(random_number)  # a large prime number
 
     a = random.randint(1, p)
 
-    g = random.randint(2, 5)  # generator
+    g = random.randint(2, 3)  # generator
 
-    G = list(set(range(0, 200, g))) # 假设二元运算符为乘法
+    G = list(set(range(0, 100, g))) # 假设二元运算符为乘法
 
     h = random.choice(G)
 
     return {"G": G, "g": g, "h": h, "p": p, "a": a, "b": binary_operator}
+
+def simulate_offline(all_clients_in_comm, drop_rate):
+    random.shuffle(all_clients_in_comm)
+    num_to_remove = int(len(all_clients_in_comm) * drop_rate)
+    shuffled_and_removed = all_clients_in_comm[:-num_to_remove]
+
+    return shuffled_and_removed
 
 
 if __name__ == "__main__":
@@ -98,9 +105,9 @@ if __name__ == "__main__":
 
     myClients = ClientsGroup('mnist', args['IID'], args['num_of_participants'], dev)
     testDataLoader = myClients.test_data_loader
-    clients_set = myClients.getClients()
+    clients_set = myClients.get_clients()
     Clients.clients_set = clients_set
-    print("===== Clients generation completed =====")
+    print("===== Clients generation completed =====\n")
 
 
     global_parameters = {}
@@ -120,7 +127,7 @@ if __name__ == "__main__":
         global_parameters[key] = var.clone()  # clone原来的参数，并且支持梯度回溯
 
     for i in range(args['num_comm']):
-        print("Communicate round {}".format(i+1))
+        print("== Communicate round {} ==".format(i+1))
 
         order = np.random.permutation(args['num_of_participants']) # Shuffle the clients
         clients_in_comm = ['client{}'.format(i) for i in order[0:Np]]
@@ -134,7 +141,7 @@ if __name__ == "__main__":
         # Round 2
         for each_client in clients_in_comm:
             token, verification_information, amount_of_request_parameters = \
-                myClients.clients_set[each_client].getTokenAndVerificationInformation()
+                myClients.clients_set[each_client].get_token_and_verification_information()
 
             k_plus_Np = args['k_positions'] * len(clients_in_comm)
             temp_exponent = param['a'] ** (k_plus_Np - len(myClients.clients_set[each_client].request_parameters))
@@ -146,8 +153,8 @@ if __name__ == "__main__":
                 right_side = bilinear_pairing_function(param['g'], param['h'] ** temp_exponent)
 
             if left_side != right_side: # 双线性配对函数 bilinear pairing function
-                print(111111111111)
-                continue
+                print("===== Agreement terminated =====")
+                sys.exit(1)
             else:
                 random_mask = random.randint(1, param['p'])
                 # OT.Enc
@@ -169,27 +176,72 @@ if __name__ == "__main__":
                                                                          random_mask * param['h']) * data_positions[count])
                     count += 1
 
-                myClients.clients_set[each_client].setSecretList(secret_list)
-
-        '''for client in tqdm(clients_in_comm):
-            if myClients.clients_set[client].secret_list == []:
-                print(True)
-            else:
-                print(False)'''
+                myClients.clients_set[each_client].set_secret_list(secret_list)
 
         '''=====数据匿名收集阶段====='''
         # Round 1
-        for client in tqdm(clients_in_comm):
-            local_parameters = myClients.clients_set[client].localUpdate(args['epoch'], args['batchsize'], net,
+        u1 = clients_in_comm
+        all_encrypted_shared_values = []
+        for client in tqdm(u1):
+            local_parameters = myClients.clients_set[client].local_update(args['epoch'], args['batchsize'], net,
                                                                          loss_func, opti, global_parameters)
-            print(myClients.clients_set[client].position_list)
-            myClients.clients_set[client].AnonymousModelUploadListGeneration(global_parameters, local_parameters)
+
+            myClients.clients_set[client].generate_anonymous_model_upload_list(global_parameters, local_parameters)
+            myClients.clients_set[client].generate_and_encrypt_shared_values(args['threshold'])
+
+            anonymous_model_upload_list = myClients.clients_set[client].get_anonymous_model_upload_list()
+            encrypted_shared_values = myClients.clients_set[client].get_encrypted_shared_values()
+            all_encrypted_shared_values.append(encrypted_shared_values)
+
+        u2 = simulate_offline(u1, args['drop_rate'])
+        if len(u2) < args['threshold']:
+            print("===== Agreement terminated =====")
+            sys.exit(1)
+        else:
+            summed_values_dict = {}
+            for client in u2:
+                decryptable_shared_values = []
+                for each_dict in all_encrypted_shared_values:
+                    decryptable_shared_values.append(each_dict[client])
+                myClients.clients_set[client].receive_decryptable_shared_values(decryptable_shared_values)
+
+                # Round 2
+                summed_shared_values = myClients.clients_set[client].decrypt_and_sum_shared_values()
+                summed_values_dict[client] = summed_shared_values
+
+        u3 = simulate_offline(u2, args['drop_rate'])
+        if len(u3) < args['threshold']:
+            print("===== Agreement terminated =====")
+            sys.exit(1)
+        else:
+            # part 1
+            def part_1(item_count):
+                temp_sum = len(u2) * item_count
+                for client in u2:
+                    temp_sum += myClients.clients_set[client].model_mask
+                if param["b"] == "+":
+                    total_sum = param['g'] * temp_sum
+                elif param["b"] == "*":
+                    total_sum = param['g'] ** temp_sum
+                return total_sum
+
+            # part 2
+            new_dict = {}
+            for layer, model_parameter in global_parameters.items():
+                new_model_parameter = model_parameter ** (len(u2) - 1)
+                new_dict[layer] = new_model_parameter
+            part_2 = new_dict
+
+            # part 3
 
 
 
 
-            for i in local_parameters:
-                pass
+
+
+
+            aggregated_model_list =
+
 
 
 
@@ -199,7 +251,7 @@ if __name__ == "__main__":
         sum_parameters = None
         for client in tqdm(clients_in_comm):
 
-            local_parameters = myClients.clients_set[client].localUpdate(args['epoch'], args['batchsize'], net,
+            local_parameters = myClients.clients_set[client].local_update(args['epoch'], args['batchsize'], net,
                                                                          loss_func, opti, global_parameters)
             if sum_parameters is None: # First iteration
                 sum_parameters = {}

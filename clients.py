@@ -3,9 +3,11 @@ import torch
 import random
 from tqdm import tqdm
 from decimal import Decimal
+from sympy import symbols, Eq, solve
 from torch.utils.data import TensorDataset
 from torch.utils.data import DataLoader
 from getData import GetDataSet
+
 
 
 
@@ -18,7 +20,7 @@ def bilinear_pairing_function(a, b):
 
     return float(format(result, ".12e"))
 
-def elgamalEncryption(secret, pubilc_key):
+def elgamal_encrypt(secret, pubilc_key):
     #pubilc_key = pubilc_key % Clients.param['p']
     k = random.randint(1, 5)
     c1 = Clients.param['g']
@@ -27,7 +29,7 @@ def elgamalEncryption(secret, pubilc_key):
     return [c1, c2]
 
 
-def elgamalDecryption(messages, private_key):
+def elgamal_decrypt(messages, private_key):
     c1, c2 = messages[0], messages[1]
 
     return c2 * (c1 ** (-private_key))
@@ -62,11 +64,16 @@ class Clients(object):
         self.position_list = []
 
         '''=====Stage 3====='''
+        # Round 1
+        self.model_mask = 0
         self.anonymous_model_upload_list = []
+        self.encrypted_shared_values = {}
+        self.decryptable_shared_values = []
+        # Round 2
 
 
 
-    def localUpdate(self, localEpoch, localBatchSize, Net, lossFun, opti, global_parameters):
+    def local_update(self, localEpoch, localBatchSize, Net, lossFun, opti, global_parameters):
         Net.load_state_dict(global_parameters, strict=True)
         self.train_dl = DataLoader(self.train_ds, batch_size=localBatchSize, shuffle=True)
         for epoch in range(localEpoch):
@@ -81,21 +88,22 @@ class Clients(object):
         return Net.state_dict()
 
 
-    def takeOutFromRequestCollection(self, request_collection):
+    def take_out_from_request_collection(self, request_collection):
         elements_to_remove = random.sample(request_collection, random.randint(1, Clients.k_positions))
         for element in elements_to_remove:
             request_collection.remove(element)
 
         return elements_to_remove, request_collection
 
-    def round1_firstClient(self):
+
+    def round1_first_client(self):
         self.whether_picked_in_round1 = True
 
         # i
         request_collection = list(range(1, Clients.k_positions * len(Clients.clients_in_comm) + 1))
 
         # ii
-        request_parameters, request_collection = self.takeOutFromRequestCollection(request_collection)
+        request_parameters, request_collection = self.take_out_from_request_collection(request_collection)
         self.request_parameters = request_parameters
 
         b = random.randint(1, 50) # b belongs to set Z
@@ -118,7 +126,7 @@ class Clients(object):
 
         encrypted_request_collection = []
         for element in request_collection:
-            encrypted_element = elgamalEncryption(element, next_client_public_key)
+            encrypted_element = elgamal_encrypt(element, next_client_public_key)
             encrypted_request_collection.append(encrypted_element)
 
         if Clients.param["b"] == "+":
@@ -127,7 +135,7 @@ class Clients(object):
             return each_client, [encrypted_request_collection, timestep, Clients.param['g'] ** b]
 
 
-    def round1_otherClients(self, encrypted_request_collection, timestep, gb):
+    def round1_other_clients(self, encrypted_request_collection, timestep, gb):
         self.whether_picked_in_round1 = True
 
         # i (no need to re-select
@@ -136,10 +144,10 @@ class Clients(object):
         # ii
         request_collection = []
         for encrypted_element in encrypted_request_collection:
-            decrypted_element = elgamalDecryption(encrypted_element, self.client_private_key)
+            decrypted_element = elgamal_decrypt(encrypted_element, self.client_private_key)
             request_collection.append(decrypted_element)
 
-        request_parameters, request_collection = self.takeOutFromRequestCollection(request_collection)
+        request_parameters, request_collection = self.take_out_from_request_collection(request_collection)
         self.request_parameters = request_parameters
         # iii
         if Clients.param["b"] == "+":
@@ -160,13 +168,13 @@ class Clients(object):
 
             encrypted_request_collection = []
             for element in request_collection:
-                encrypted_element = elgamalEncryption(element, next_client_public_key)
+                encrypted_element = elgamal_encrypt(element, next_client_public_key)
                 encrypted_request_collection.append(encrypted_element)
 
             return each_client, [encrypted_request_collection, timestep, gb]
 
 
-    def getTokenAndVerificationInformation(self):
+    def get_token_and_verification_information(self):
         temp_sum = sum([element+Clients.param['a'] for element in self.request_parameters])
         k_plus_Np = Clients.k_positions * len(Clients.clients_in_comm)
         temp_exponent = Clients.param['a'] ** (k_plus_Np - len(self.request_parameters))
@@ -183,11 +191,12 @@ class Clients(object):
         return token, verification_information, len(self.request_parameters)
 
 
-    def setSecretList(self, secret_list):
+    def set_secret_list(self, secret_list):
         self.secret_list = secret_list
-        self.decryptionSecret()
+        self.decrypt_secret()
 
-    def decryptionSecret(self):
+
+    def decrypt_secret(self):
         # OT.Dec
         self.position_list = []
         count = 1
@@ -203,29 +212,82 @@ class Clients(object):
             count += 1
 
 
-    def AnonymousModelUploadListGeneration(self, global_parameters, local_parameters):
-        def tensorMultiplication(dict, multiplier):
+    def generate_anonymous_model_upload_list(self, global_parameters, local_parameters):
+        def multiply_tensor(dict, multiplier):
             new_dict = {}
             for key in dict:
                 new_dict[key] = dict[key] * multiplier
             return new_dict
 
-        model_mask = random.randint(1, Clients.param['p'])
+        self.model_mask = random.randint(1, Clients.param['p'])
         random_position = random.choice(self.position_list)
 
         self.anonymous_model_upload_list = []
         for count in range(1, Clients.k_positions * len(Clients.clients_in_comm) + 1):
             if count == random_position:
                 if Clients.param["b"] == "+":
-                    item = tensorMultiplication(local_parameters, Clients.param['g'] * (model_mask + count))
+                    item = multiply_tensor(local_parameters, Clients.param['g'] * (self.model_mask + count))
                 elif Clients.param["b"] == "*":
-                    item = tensorMultiplication(local_parameters, Clients.param['g'] ** (model_mask + count))
+                    item = multiply_tensor(local_parameters, Clients.param['g'] ** (self.model_mask + count))
             else:
                 if Clients.param["b"] == "+":
-                    item = tensorMultiplication(global_parameters, Clients.param['g'] * (model_mask + count))
+                    item = multiply_tensor(global_parameters, Clients.param['g'] * (self.model_mask + count))
                 elif Clients.param["b"] == "*":
-                    item = tensorMultiplication(global_parameters, Clients.param['g'] ** (model_mask + count))
+                    item = multiply_tensor(global_parameters, Clients.param['g'] ** (self.model_mask + count))
             self.anonymous_model_upload_list.append(item)
+
+
+    def get_anonymous_model_upload_list(self):
+        return self.anonymous_model_upload_list
+
+
+    def generate_and_encrypt_shared_values(self, t):
+        '''generation'''
+        coefficients = [random.randint(-10, 10) for _ in range(t-1)]
+        def multiple_equations(highest_degree_of_function, coefficients, x):
+            y = 0
+            for degree in range(1, highest_degree_of_function - 1):
+                y += coefficients[degree - 1] * x ** degree
+            return y
+
+        shared_values = {}
+        for each_client in Clients.clients_in_comm:
+            client_number = int(each_client[6:])
+            shared_values[each_client] = multiple_equations(t, coefficients, client_number) + self.model_mask
+            # the self.model_mask is the constant s in the function
+
+        '''encryption'''
+        self.encrypted_shared_values = {} # {'client24': 365590165707817800, 'client12': 89546683720116...
+        for each_client, shared_values in shared_values.items():
+            public_key_of_pj = Clients.clients_set[each_client].client_public_key
+            encrypted_value = elgamal_encrypt(shared_values, public_key_of_pj)
+            self.encrypted_shared_values[each_client] = encrypted_value
+
+
+    def get_encrypted_shared_values(self):
+        return self.encrypted_shared_values
+
+
+    def receive_decryptable_shared_values(self, decryptable_shared_values):
+        self.decryptable_shared_values = decryptable_shared_values
+
+
+    def decrypt_and_sum_shared_values(self):
+        decrypt_values = []
+        for cipher in self.decryptable_shared_values:
+            value = elgamal_decrypt(cipher, self.client_private_key)
+            decrypt_values.append(value)
+
+        summed_shared_values = sum(decrypt_values)
+        return summed_shared_values
+
+
+
+
+
+
+
+
 
 
 
@@ -242,10 +304,10 @@ class ClientsGroup(object):
         self.dev = dev
         self.clients_set = {}
         self.test_data_loader = None
-        self.dataSetBalanceAllocation()
+        self.allocate_data_set_balance()
 
 
-    def dataSetBalanceAllocation(self):
+    def allocate_data_set_balance(self):
         mnistDataSet = GetDataSet(self.data_set_name, self.is_iid)
 
         test_data = torch.tensor(mnistDataSet.test_data)
@@ -270,14 +332,14 @@ class ClientsGroup(object):
                               random.randint(1, 3), self.dev, random.randint(1, Clients.param['p']))
             self.clients_set['client{}'.format(i)] = someone
 
-    def getClients(self):
+    def get_clients(self):
         return self.clients_set
 
     def round1(self, Pi):
-        next_client, returns = self.clients_set[Pi].round1_firstClient()
+        next_client, returns = self.clients_set[Pi].round1_first_client()
 
         while True:
-            next_client, returns = self.clients_set[next_client].round1_otherClients(*returns)
+            next_client, returns = self.clients_set[next_client].round1_other_clients(*returns)
             if next_client == 0:  # round 1 all done! Time for position selecting
                 break
 
