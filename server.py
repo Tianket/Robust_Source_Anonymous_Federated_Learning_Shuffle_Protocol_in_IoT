@@ -214,33 +214,40 @@ if __name__ == "__main__":
             print("===== Agreement terminated =====")
             sys.exit(1)
         else:
-            # part 1
-            def part_1(item_count):
+            aggregation_model_list = []
+
+            # part 2
+            part_2 = {}
+            for layer, model_parameter in global_parameters.items():
+                new_model_parameter = model_parameter ** (len(u2) - 1)
+                part_2[layer] = new_model_parameter
+
+            for item_count in range(1, args['k_positions'] * Np + 1):
+
+                # part 1
                 temp_sum = len(u2) * item_count
                 for client in u2:
                     temp_sum += myClients.clients_set[client].model_mask
                 if param["b"] == "+":
-                    total_sum = param['g'] * temp_sum
+                    part_1 = param['g'] * temp_sum
                 elif param["b"] == "*":
-                    total_sum = param['g'] ** temp_sum
-                return total_sum
+                    part_1 = param['g'] ** temp_sum
 
-            # part 2
-            new_dict = {}
-            for layer, model_parameter in global_parameters.items():
-                new_model_parameter = model_parameter ** (len(u2) - 1)
-                new_dict[layer] = new_model_parameter
-            part_2 = new_dict
+                # part 3
+                try:
+                    index = data_positions.index(item_count) # index is j
+                except ValueError:
+                    print("Couldn't find the index of the element")
+                part_3 = myClients.clients_set["client{}".format(index)].local_parameters
 
-            # part 3
+                # Multiply the three above
+                temp_dict = {}
+                for layer in part_2.keys():
+                    product = part_1 * part_2[layer] * part_3[layer]
+                    temp_dict[layer] = product
 
+                aggregation_model_list.append(temp_dict)
 
-
-
-
-
-
-            aggregated_model_list =
 
 
 

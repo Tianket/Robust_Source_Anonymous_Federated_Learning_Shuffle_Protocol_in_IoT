@@ -65,6 +65,7 @@ class Clients(object):
 
         '''=====Stage 3====='''
         # Round 1
+        self.local_parameters = {}
         self.model_mask = 0
         self.anonymous_model_upload_list = []
         self.encrypted_shared_values = {}
@@ -218,7 +219,7 @@ class Clients(object):
             for key in dict:
                 new_dict[key] = dict[key] * multiplier
             return new_dict
-
+        self.local_parameters = local_parameters
         self.model_mask = random.randint(1, Clients.param['p'])
         random_position = random.choice(self.position_list)
 
