@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import random
 from tqdm import tqdm
+from decimal import Decimal
 from torch.utils.data import TensorDataset
 from torch.utils.data import DataLoader
 from getData import GetDataSet
@@ -9,13 +10,13 @@ from getData import GetDataSet
 
 
 def bilinear_pairing_function(a, b):
-
+    a, b = Decimal(a), Decimal(b)
     if Clients.param["b"] == "+":
         result = Clients.param['g'] * (a * b)
     elif Clients.param["b"] == "*":
         result = Clients.param['g'] ** (a * b)
 
-    return result
+    return float(format(result, ".12e"))
 
 def elgamalEncryption(secret, pubilc_key):
     #pubilc_key = pubilc_key % Clients.param['p']
