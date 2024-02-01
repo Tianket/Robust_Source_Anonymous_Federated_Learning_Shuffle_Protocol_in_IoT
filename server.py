@@ -225,9 +225,9 @@ if __name__ == "__main__":
             for item_count in range(1, args['k_positions'] * Np + 1):
 
                 # part 1
-                temp_sum = len(u2) * item_count
+                temp_sum = 0
                 for client in u2:
-                    temp_sum += myClients.clients_set[client].model_mask
+                    temp_sum += myClients.clients_set[client].model_mask + len(u2) * item_count
                 if param["b"] == "+":
                     part_1 = param['g'] * temp_sum
                 elif param["b"] == "*":
@@ -247,6 +247,16 @@ if __name__ == "__main__":
                     temp_dict[layer] = product
 
                 aggregation_model_list.append(temp_dict)
+
+                # SS.Recon
+                for client in u3:
+                    for j in range(1, args['threshold'] + 1):
+                        product = 1
+
+
+
+
+
 
 
 
