@@ -41,15 +41,18 @@ def generate_params():
     binary_operator = "+"
     #binary_operator = "*"
 
-    random_bytes = secrets.token_bytes(2)
+    random_bytes = secrets.token_bytes(4)
     random_number = int.from_bytes(random_bytes, byteorder='big')
     p = nextprime(random_number)  # a large prime number
 
     a = random.randint(1, p)
 
-    g = random.randint(2, 3)  # generator
+    g = random.randint(2, 20)  # generator
 
-    G = list(set(range(0, 100, g))) # 假设二元运算符为乘法
+    if binary_operator == '+':
+        G = list(set(range(0, 300, g)))
+    if binary_operator == '*':
+        G = [g**i for i in range(20)]
 
     h = random.choice(G)
 
@@ -88,6 +91,7 @@ if __name__ == "__main__":
 
     # for clients.py
     param = generate_params()
+    print(param)
     print("===== Params generation completed =====")
 
     Np = int(max(args['num_of_participants'] * args['cfraction'], 1))  # number in communication
@@ -126,17 +130,20 @@ if __name__ == "__main__":
         # .item() 取出tensor中的值，变为Python的数据类型
         global_parameters[key] = var.clone()  # clone原来的参数，并且支持梯度回溯
 
-    for i in range(args['num_comm']):
-        print("== Communicate round {} ==".format(i+1))
+    for comm_round in range(args['num_comm']):
+        print("== Communicate round {} ==".format(comm_round + 1))
 
         order = np.random.permutation(args['num_of_participants']) # Shuffle the clients
-        clients_in_comm = ['client{}'.format(i) for i in order[0:Np]]
+        clients_in_comm = ['client{}'.format(comm_round) for comm_round in order[0:Np]]
         Clients.clients_in_comm = clients_in_comm # Send to all clients
 
         '''=====数据位置生成阶段====='''
         # Round 1
         Pi = clients_in_comm[0]
         myClients.round1(Pi)
+
+        for each_client in clients_in_comm:
+            print(myClients.clients_set[each_client].request_parameters)
 
         # Round 2
         for each_client in clients_in_comm:
@@ -177,6 +184,7 @@ if __name__ == "__main__":
                     count += 1
 
                 myClients.clients_set[each_client].set_secret_list(secret_list)
+                myClients.clients_set[each_client].decrypt_secret()
 
         '''=====数据匿名收集阶段====='''
         # Round 1
@@ -214,7 +222,7 @@ if __name__ == "__main__":
             print("===== Agreement terminated =====")
             sys.exit(1)
         else:
-            aggregation_model_list = []
+            aggregation_model_list = [] # Lw
 
             # part 2
             part_2 = {}
@@ -234,24 +242,76 @@ if __name__ == "__main__":
                     part_1 = param['g'] ** temp_sum
 
                 # part 3
-                try:
+                part_3 = 0
+                for client in clients_in_comm:
+                    if item_count in myClients.clients_set[client].request_parameters:
+                        part_3 = myClients.clients_set[client].local_parameters
+                        break
+
+                '''try:
                     index = data_positions.index(item_count) # index is j
                 except ValueError:
                     print("Couldn't find the index of the element")
-                part_3 = myClients.clients_set["client{}".format(index)].local_parameters
+                part_3 = myClients.clients_set["client{}".format(index)].local_parameters'''
+
+                # print(type(part_3))
 
                 # Multiply the three above
                 temp_dict = {}
-                for layer in part_2.keys():
-                    product = part_1 * part_2[layer] * part_3[layer]
-                    temp_dict[layer] = product
+                if part_3 == 0:
+                    aggregation_model_list.append(0)
+                else:
+                    for layer in part_2.keys():
+                        product = part_1 * part_2[layer] * part_3[layer]
+                        temp_dict[layer] = product
 
-                aggregation_model_list.append(temp_dict)
+                    aggregation_model_list.append(temp_dict)
 
-                # SS.Recon
-                for client in u3:
-                    for j in range(1, args['threshold'] + 1):
-                        product = 1
+
+            # SS.Recon
+            sum_of_secrets = 1 # 乘积
+            for i in u2: # 但是之前累加的分享值是u2的主机
+                temp_sum = 0
+                for j in u3[:args['threshold']]: # 选择分享值是从j属于u3中选取，所以用u3截
+                    if ((int(i[6:]) + 1) - (int(j[6:]) + 1)) != 0:
+                        temp_sum += (-(int(j[6:]) + 1) / ((int(i[6:]) + 1) - (int(j[6:]) + 1))) * summed_values_dict[i]
+                sum_of_secrets *= temp_sum
+
+
+            original_model_gradient_list = []
+
+            # the right part of the denominator (constant
+            temp_denominator_right = part_2
+            for item_count in range(1, args['k_positions'] * Np + 1):
+
+                # the left part of the denominator
+                temp_sum = 0
+                for client in u2:
+                    temp_sum += myClients.clients_set[client].model_mask + len(u2) * item_count
+                if param["b"] == "+":
+                    temp_denominator_left = param['g'] * temp_sum
+                elif param["b"] == "*":
+                    temp_denominator_left = param['g'] ** temp_sum
+
+                # each item in original_model_gradient_list is a model parameters with layers
+                if aggregation_model_list[item_count - 1] == 0:
+                    original_model_gradient_list.append(0)
+                else:
+                    temp_dict = {}
+                    for layer in temp_denominator_right.keys():
+                        temp_dict[layer] = aggregation_model_list[item_count - 1][layer] \
+                                           / (temp_denominator_left * temp_denominator_right[layer]) - global_parameters[layer]
+
+                    original_model_gradient_list.append(temp_dict)
+
+            if 0 in original_model_gradient_list: # to make sure 0 is in the list, to avoid error
+                if original_model_gradient_list.count(0) == len(u2):
+                    pass
+                else:
+                    print("===== Agreement terminated =====")
+                    #sys.exit(1)
+
+
 
 
 
@@ -282,7 +342,7 @@ if __name__ == "__main__":
             global_parameters[var] = (sum_parameters[var] / Np)
 
         with torch.no_grad():
-            if (i + 1) % args['val_freq'] == 0:
+            if (comm_round + 1) % args['val_freq'] == 0:
                 net.load_state_dict(global_parameters, strict=True)
                 sum_accu = 0
                 num = 0
@@ -294,10 +354,11 @@ if __name__ == "__main__":
                     num += 1
                 print('accuracy: {}'.format(sum_accu / num))
 
-        if (i + 1) % args['save_freq'] == 0:
+    if 0:
+        if (comm_round + 1) % args['save_freq'] == 0:
             torch.save(net, os.path.join(args['save_path'],
                                          '{}_num_comm{}_E{}_B{}_lr{}_num_clients{}_cf{}'.format(args['model_name'],
-                                                                                                i, args['epoch'],
+                                                                                                comm_round, args['epoch'],
                                                                                                 args['batchsize'],
                                                                                                 args['learning_rate'],
                                                                                                 args['num_of_participants'],

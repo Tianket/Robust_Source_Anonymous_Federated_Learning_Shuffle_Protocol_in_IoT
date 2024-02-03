@@ -4,9 +4,11 @@ import random
 from tqdm import tqdm
 from decimal import Decimal
 from sympy import symbols, Eq, solve
+from sympy import isprime, nextprime
 from torch.utils.data import TensorDataset
 from torch.utils.data import DataLoader
 from getData import GetDataSet
+
 
 
 
@@ -20,11 +22,17 @@ def bilinear_pairing_function(a, b):
 
     return float(format(result, ".12e"))
 
+
 def elgamal_encrypt(secret, pubilc_key):
-    #pubilc_key = pubilc_key % Clients.param['p']
-    k = random.randint(1, 5)
-    c1 = Clients.param['g']
-    c2 = (pubilc_key ** k) * secret
+    k = nextprime(random.randint(1, 5)) # 1 < k < p-1
+    pubilc_key = pubilc_key % Clients.param['p']
+
+    if Clients.param["b"] == "+":
+        c1 = (Clients.param['g'] * k) % Clients.param['p']
+        c2 = (pubilc_key * k * secret) % Clients.param['p']
+    elif Clients.param["b"] == "*":
+        c1 = (Clients.param['g'] ** k) % Clients.param['p']
+        c2 = (pubilc_key ** k * secret) % Clients.param['p']
 
     return [c1, c2]
 
@@ -32,7 +40,14 @@ def elgamal_encrypt(secret, pubilc_key):
 def elgamal_decrypt(messages, private_key):
     c1, c2 = messages[0], messages[1]
 
-    return c2 * (c1 ** (-private_key))
+    if Clients.param["b"] == "+":
+        s = (c1 * private_key) % Clients.param['p']
+        return c2 / s % Clients.param['p']
+    elif Clients.param["b"] == "*":
+        s = (c1 ** private_key) % Clients.param['p']
+        s_inverse = s ** (-1) % Clients.param['p']
+        return c2 * s_inverse % Clients.param['p']
+
 
 
 
@@ -42,7 +57,7 @@ class Clients(object):
     clients_in_comm = []
     clients_set = {}
 
-    def __init__(self, trainDataSet, public_parameter, dev, xi):
+    def __init__(self, trainDataSet, public_parameter, dev, client_private_key):
         self.train_ds = trainDataSet
         self.dev = dev
         self.train_dl = None
@@ -50,11 +65,11 @@ class Clients(object):
 
         '''=====Stage 1====='''
         self.public_parameter = public_parameter # uj, not g ** uj
-        self.client_private_key = xi # ski
+        self.client_private_key = client_private_key # ski
         if Clients.param["b"] == "+":
-            self.client_public_key = Clients.param['g'] * xi
+            self.client_public_key = Clients.param['g'] * client_private_key
         elif Clients.param["b"] == "*":
-            self.client_public_key = Clients.param['g'] ** xi
+            self.client_public_key = Clients.param['g'] ** client_private_key
 
         '''=====Stage 2====='''
         self.request_parameters = []
@@ -90,11 +105,14 @@ class Clients(object):
 
 
     def take_out_from_request_collection(self, request_collection):
-        elements_to_remove = random.sample(request_collection, random.randint(1, Clients.k_positions))
-        for element in elements_to_remove:
-            request_collection.remove(element)
+        amount_to_take_out = random.randint(1, Clients.k_positions)
+        if len(request_collection) <= amount_to_take_out:
+            return [], request_collection
+        else:
+            elements_to_remove = random.sample(request_collection, amount_to_take_out)
+            new_request_collection = [item for item in request_collection if item not in elements_to_remove]
 
-        return elements_to_remove, request_collection
+            return elements_to_remove, new_request_collection
 
 
     def round1_first_client(self):
@@ -104,6 +122,7 @@ class Clients(object):
         request_collection = list(range(1, Clients.k_positions * len(Clients.clients_in_comm) + 1))
 
         # ii
+        self.request_parameters = []
         request_parameters, request_collection = self.take_out_from_request_collection(request_collection)
         self.request_parameters = request_parameters
 
@@ -194,7 +213,6 @@ class Clients(object):
 
     def set_secret_list(self, secret_list):
         self.secret_list = secret_list
-        self.decrypt_secret()
 
 
     def decrypt_secret(self):
@@ -253,7 +271,7 @@ class Clients(object):
 
         shared_values = {}
         for each_client in Clients.clients_in_comm:
-            client_number = int(each_client[6:])
+            client_number = int(each_client[6:]) + 1
             shared_values[each_client] = multiple_equations(t, coefficients, client_number) + self.model_mask
             # the self.model_mask is the constant s in the function
 
