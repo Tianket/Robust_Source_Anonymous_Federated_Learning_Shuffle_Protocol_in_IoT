@@ -91,7 +91,6 @@ if __name__ == "__main__":
 
     # for clients.py
     param = generate_params()
-    print(param)
     print("===== Params generation completed =====")
 
     Np = int(max(args['num_of_participants'] * args['cfraction'], 1))  # number in communication
@@ -142,9 +141,9 @@ if __name__ == "__main__":
         Pi = clients_in_comm[0]
         myClients.round1(Pi)
 
-        for each_client in clients_in_comm:
+        '''for each_client in clients_in_comm:
             print(myClients.clients_set[each_client].request_parameters)
-
+'''
         # Round 2
         for each_client in clients_in_comm:
             token, verification_information, amount_of_request_parameters = \
@@ -160,7 +159,7 @@ if __name__ == "__main__":
                 right_side = bilinear_pairing_function(param['g'], param['h'] ** temp_exponent)
 
             if left_side != right_side: # 双线性配对函数 bilinear pairing function
-                print("===== Agreement terminated =====")
+                print("===== Agreement terminated 1=====")
                 sys.exit(1)
             else:
                 random_mask = random.randint(1, param['p'])
@@ -203,7 +202,7 @@ if __name__ == "__main__":
 
         u2 = simulate_offline(u1, args['drop_rate'])
         if len(u2) < args['threshold']:
-            print("===== Agreement terminated =====")
+            print("===== Agreement terminated 2=====")
             sys.exit(1)
         else:
             summed_values_dict = {}
@@ -219,7 +218,7 @@ if __name__ == "__main__":
 
         u3 = simulate_offline(u2, args['drop_rate'])
         if len(u3) < args['threshold']:
-            print("===== Agreement terminated =====")
+            print("===== Agreement terminated 3=====")
             sys.exit(1)
         else:
             aggregation_model_list = [] # Lw
@@ -308,7 +307,7 @@ if __name__ == "__main__":
                 if original_model_gradient_list.count(0) == len(u2):
                     pass
                 else:
-                    print("===== Agreement terminated =====")
+                    print("===== Agreement terminated 4 =====")
                     #sys.exit(1)
 
 

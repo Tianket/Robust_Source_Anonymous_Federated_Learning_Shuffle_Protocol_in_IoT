@@ -29,7 +29,7 @@ def elgamal_encrypt(secret, pubilc_key):
 
     if Clients.param["b"] == "+":
         c1 = (Clients.param['g'] * k) % Clients.param['p']
-        c2 = (pubilc_key * k * secret) % Clients.param['p']
+        c2 = (pubilc_key * k + secret) % Clients.param['p']
     elif Clients.param["b"] == "*":
         c1 = (Clients.param['g'] ** k) % Clients.param['p']
         c2 = (pubilc_key ** k * secret) % Clients.param['p']
@@ -42,11 +42,10 @@ def elgamal_decrypt(messages, private_key):
 
     if Clients.param["b"] == "+":
         s = (c1 * private_key) % Clients.param['p']
-        return c2 / s % Clients.param['p']
+        return c2 - s % Clients.param['p']
     elif Clients.param["b"] == "*":
-        s = (c1 ** private_key) % Clients.param['p']
-        s_inverse = s ** (-1) % Clients.param['p']
-        return c2 * s_inverse % Clients.param['p']
+        s = c1 ** (Clients.param['p'] - 2) % Clients.param['p']
+        return c2 * s ** private_key % Clients.param['p']
 
 
 
@@ -196,16 +195,17 @@ class Clients(object):
 
     def get_token_and_verification_information(self):
         temp_sum = sum([element+Clients.param['a'] for element in self.request_parameters])
+        print(temp_sum, self.request_parameters)
         k_plus_Np = Clients.k_positions * len(Clients.clients_in_comm)
         temp_exponent = Clients.param['a'] ** (k_plus_Np - len(self.request_parameters))
 
         # OT.Token
         if Clients.param["b"] == "+":
             token = Clients.param['g'] * (self.client_private_key / temp_sum)  # Toki
-            verification_information = Clients.param['h'] * ((temp_sum * temp_exponent) / self.client_private_key)  # hi
+            verification_information = Clients.param['h'] * ((temp_sum * temp_exponent) // self.client_private_key)  # hi
         elif Clients.param["b"] == "*":
             token = Clients.param['g'] ** (self.client_private_key / temp_sum)  # Toki
-            verification_information = Clients.param['h'] ** ((temp_sum * temp_exponent) / self.client_private_key)  # hi
+            verification_information = Clients.param['h'] ** ((temp_sum * temp_exponent) // self.client_private_key)  # hi
 
 
         return token, verification_information, len(self.request_parameters)
