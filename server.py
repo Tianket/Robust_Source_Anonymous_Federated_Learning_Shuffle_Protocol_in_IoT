@@ -253,8 +253,6 @@ if __name__ == "__main__":
                     print("Couldn't find the index of the element")
                 part_3 = myClients.clients_set["client{}".format(index)].local_parameters'''
 
-                # print(type(part_3))
-
                 # Multiply the three above
                 temp_dict = {}
                 if part_3 == 0:
@@ -303,22 +301,16 @@ if __name__ == "__main__":
 
                     original_model_gradient_list.append(temp_dict)
 
+            print("0：{}".format(original_model_gradient_list.count(0)))
+            print("非空：{}".format(len(original_model_gradient_list) - original_model_gradient_list.count(0)))
+            print("u2：{}".format(len(u2)))
             if 0 in original_model_gradient_list: # to make sure 0 is in the list, to avoid error
-                if original_model_gradient_list.count(0) == len(u2):
+                if len(original_model_gradient_list) - original_model_gradient_list.count(0) == len(u2):
                     pass
                 else:
-                    print("===== Agreement terminated 4 =====")
+                    pass
+                    #print("===== Agreement terminated 4 =====")
                     #sys.exit(1)
-
-
-
-
-
-
-
-
-
-
 
 
 

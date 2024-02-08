@@ -195,7 +195,6 @@ class Clients(object):
 
     def get_token_and_verification_information(self):
         temp_sum = sum([element+Clients.param['a'] for element in self.request_parameters])
-        print(temp_sum, self.request_parameters)
         k_plus_Np = Clients.k_positions * len(Clients.clients_in_comm)
         temp_exponent = Clients.param['a'] ** (k_plus_Np - len(self.request_parameters))
 
@@ -355,6 +354,9 @@ class ClientsGroup(object):
         return self.clients_set
 
     def round1(self, Pi):
+        for each_client in Clients.clients_in_comm:
+            self.clients_set[each_client].whether_picked_in_round1 = False
+
         next_client, returns = self.clients_set[Pi].round1_first_client()
 
         while True:
