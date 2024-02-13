@@ -95,6 +95,7 @@ if __name__ == "__main__":
 
     Np = int(max(args['num_of_participants'] * args['cfraction'], 1))  # number in communication
     data_positions = list(range(1, args['k_positions'] * Np + 1))
+    random.shuffle(data_positions)
 
     private_key = random.randint(1, param['p'])
     if param["b"] == "+":
@@ -189,7 +190,7 @@ if __name__ == "__main__":
         # Round 1
         u1 = clients_in_comm
         all_encrypted_shared_values = []
-        for client in tqdm(u1):
+        for client in u1:
             local_parameters = myClients.clients_set[client].local_update(args['epoch'], args['batchsize'], net,
                                                                          loss_func, opti, global_parameters)
 
@@ -200,27 +201,30 @@ if __name__ == "__main__":
             encrypted_shared_values = myClients.clients_set[client].get_encrypted_shared_values()
             all_encrypted_shared_values.append(encrypted_shared_values)
 
+
         u2 = simulate_offline(u1, args['drop_rate'])
         if len(u2) < args['threshold']:
             print("===== Agreement terminated 2=====")
             sys.exit(1)
         else:
-            summed_values_dict = {}
             for client in u2:
                 decryptable_shared_values = []
                 for each_dict in all_encrypted_shared_values:
                     decryptable_shared_values.append(each_dict[client])
                 myClients.clients_set[client].receive_decryptable_shared_values(decryptable_shared_values)
 
-                # Round 2
-                summed_shared_values = myClients.clients_set[client].decrypt_and_sum_shared_values()
-                summed_values_dict[client] = summed_shared_values
 
         u3 = simulate_offline(u2, args['drop_rate'])
         if len(u3) < args['threshold']:
             print("===== Agreement terminated 3=====")
             sys.exit(1)
         else:
+            # Round 2
+            summed_values_dict = {}
+            for client in u3:
+                summed_shared_values = myClients.clients_set[client].decrypt_and_sum_shared_values()
+                summed_values_dict[client] = summed_shared_values
+
             aggregation_model_list = [] # Lw
 
             # part 2
@@ -267,7 +271,7 @@ if __name__ == "__main__":
 
             # SS.Recon
             sum_of_secrets = 1 # 乘积
-            for i in u2: # 但是之前累加的分享值是u2的主机
+            for i in u3: # 但是之前累加的分享值是u2的主机
                 temp_sum = 0
                 for j in u3[:args['threshold']]: # 选择分享值是从j属于u3中选取，所以用u3截
                     if ((int(i[6:]) + 1) - (int(j[6:]) + 1)) != 0:
@@ -295,9 +299,9 @@ if __name__ == "__main__":
                     original_model_gradient_list.append(0)
                 else:
                     temp_dict = {}
-                    for layer in temp_denominator_right.keys():
-                        temp_dict[layer] = aggregation_model_list[item_count - 1][layer] \
-                                           / (temp_denominator_left * temp_denominator_right[layer]) - global_parameters[layer]
+                    for var in temp_denominator_right.keys():
+                        temp_dict[var] = aggregation_model_list[item_count - 1][var] \
+                                           / (temp_denominator_left * temp_denominator_right[var]) - global_parameters[var]
 
                     original_model_gradient_list.append(temp_dict)
 
@@ -312,11 +316,16 @@ if __name__ == "__main__":
                     #print("===== Agreement terminated 4 =====")
                     #sys.exit(1)
 
+            for var in temp_denominator_right.keys():
+                for each_parameter in original_model_gradient_list:
+                    if each_parameter != 0:
+                        global_parameters[var] += each_parameter[var]
+                number_of_zero_in_original_model_gradient_list = len(original_model_gradient_list)\
+                                                                 - original_model_gradient_list.count(0)
+                global_parameters[var] = global_parameters[var] / number_of_zero_in_original_model_gradient_list
 
 
-
-
-        sum_parameters = None
+        '''sum_parameters = None
         for client in tqdm(clients_in_comm):
 
             local_parameters = myClients.clients_set[client].local_update(args['epoch'], args['batchsize'], net,
@@ -330,10 +339,11 @@ if __name__ == "__main__":
                     sum_parameters[var] = sum_parameters[var] + local_parameters[var]
 
         for var in global_parameters:
-            global_parameters[var] = (sum_parameters[var] / Np)
+            global_parameters[var] = (sum_parameters[var] / Np)'''
 
         with torch.no_grad():
-            if (comm_round + 1) % args['val_freq'] == 0:
+            if 1:
+            #if (comm_round + 1) % args['val_freq'] == 0:
                 net.load_state_dict(global_parameters, strict=True)
                 sum_accu = 0
                 num = 0
@@ -345,8 +355,9 @@ if __name__ == "__main__":
                     num += 1
                 print('accuracy: {}'.format(sum_accu / num))
 
+
     if 0:
-        if (comm_round + 1) % args['save_freq'] == 0:
+       if (comm_round + 1) % args['save_freq'] == 0:
             torch.save(net, os.path.join(args['save_path'],
                                          '{}_num_comm{}_E{}_B{}_lr{}_num_clients{}_cf{}'.format(args['model_name'],
                                                                                                 comm_round, args['epoch'],
@@ -354,4 +365,5 @@ if __name__ == "__main__":
                                                                                                 args['learning_rate'],
                                                                                                 args['num_of_participants'],
                                                                                                 args['cfraction'])))
+
 

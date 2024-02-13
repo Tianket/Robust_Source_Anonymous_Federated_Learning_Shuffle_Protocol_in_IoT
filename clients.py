@@ -337,7 +337,7 @@ class ClientsGroup(object):
 
         shard_size = mnistDataSet.train_data_size // self.num_of_clients // 2
         shards_id = np.random.permutation(mnistDataSet.train_data_size // shard_size)
-        for i in tqdm(range(self.num_of_clients)):
+        for i in range(self.num_of_clients):
             shards_id1 = shards_id[i * 2]
             shards_id2 = shards_id[i * 2 + 1]
             data_shards1 = train_data[shards_id1 * shard_size: shards_id1 * shard_size + shard_size]
