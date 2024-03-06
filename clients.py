@@ -264,14 +264,14 @@ class Clients(object):
         coefficients = [random.randint(-10, 10) for _ in range(t-1)]
         def multiple_equations(highest_degree_of_function, coefficients, x):
             y = 0
-            for degree in range(1, highest_degree_of_function - 1):
+            for degree in range(1, highest_degree_of_function):
                 y += coefficients[degree - 1] * x ** degree
             return y
 
         shared_values = {}
         for each_client in Clients.clients_in_comm:
             client_number = int(each_client[6:]) + 1
-            shared_values[each_client] = multiple_equations(t, coefficients, client_number) + self.model_mask
+            shared_values[each_client] = multiple_equations(t-1, coefficients, client_number) + self.model_mask
             # the self.model_mask is the constant s in the function
 
         '''encryption'''

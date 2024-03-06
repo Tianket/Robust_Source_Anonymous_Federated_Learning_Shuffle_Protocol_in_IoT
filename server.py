@@ -74,6 +74,8 @@ if __name__ == "__main__":
 
     os.environ['CUDA_VISIBLE_DEVICES'] = args['gpu']
     dev = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    #dev = torch.device("mps") if (torch.backends.mps.is_available() and torch.backends.mps.is_built()) else dev
+
 
     net = None
     if args['model_name'] == 'mnist_2nn':
@@ -189,7 +191,7 @@ if __name__ == "__main__":
         '''=====数据匿名收集阶段====='''
         # Round 1
         u1 = clients_in_comm
-        all_encrypted_shared_values = []
+        #random.shuffle(u1)
         for client in u1:
             local_parameters = myClients.clients_set[client].local_update(args['epoch'], args['batchsize'], net,
                                                                          loss_func, opti, global_parameters)
@@ -197,16 +199,20 @@ if __name__ == "__main__":
             myClients.clients_set[client].generate_anonymous_model_upload_list(global_parameters, local_parameters)
             myClients.clients_set[client].generate_and_encrypt_shared_values(args['threshold'])
 
-            anonymous_model_upload_list = myClients.clients_set[client].get_anonymous_model_upload_list()
-            encrypted_shared_values = myClients.clients_set[client].get_encrypted_shared_values()
-            all_encrypted_shared_values.append(encrypted_shared_values)
-
-
         u2 = simulate_offline(u1, args['drop_rate'])
         if len(u2) < args['threshold']:
             print("===== Agreement terminated 2=====")
             sys.exit(1)
         else:
+            all_anonymous_model_upload_list = []
+            all_encrypted_shared_values = []
+            for client in u2:
+                anonymous_model_upload_list = myClients.clients_set[client].get_anonymous_model_upload_list()
+                all_anonymous_model_upload_list.append(anonymous_model_upload_list)
+
+                encrypted_shared_values = myClients.clients_set[client].get_encrypted_shared_values()
+                all_encrypted_shared_values.append(encrypted_shared_values)
+
             for client in u2:
                 decryptable_shared_values = []
                 for each_dict in all_encrypted_shared_values:
@@ -225,12 +231,13 @@ if __name__ == "__main__":
                 summed_shared_values = myClients.clients_set[client].decrypt_and_sum_shared_values()
                 summed_values_dict[client] = summed_shared_values
 
+
             aggregation_model_list = [] # Lw
 
             # part 2
             part_2 = {}
             for layer, model_parameter in global_parameters.items():
-                new_model_parameter = model_parameter ** (len(u2) - 1)
+                new_model_parameter = model_parameter.clone() ** (len(u2) - 1)
                 part_2[layer] = new_model_parameter
 
             for item_count in range(1, args['k_positions'] * Np + 1):
@@ -263,8 +270,8 @@ if __name__ == "__main__":
                     aggregation_model_list.append(0)
                 else:
                     for layer in part_2.keys():
-                        product = part_1 * part_2[layer] * part_3[layer]
-                        temp_dict[layer] = product
+                        product = part_1 * part_2[layer].clone() * part_3[layer].clone()
+                        temp_dict[layer] = product.clone()
 
                     aggregation_model_list.append(temp_dict)
 
@@ -300,8 +307,8 @@ if __name__ == "__main__":
                 else:
                     temp_dict = {}
                     for var in temp_denominator_right.keys():
-                        temp_dict[var] = aggregation_model_list[item_count - 1][var] \
-                                           / (temp_denominator_left * temp_denominator_right[var]) - global_parameters[var]
+                        temp_dict[var] = aggregation_model_list[item_count - 1][var].clone() \
+                                           / (temp_denominator_left * temp_denominator_right[var].clone()) - global_parameters[var].clone()
 
                     original_model_gradient_list.append(temp_dict)
 
@@ -344,7 +351,7 @@ if __name__ == "__main__":
         with torch.no_grad():
             if 1:
             #if (comm_round + 1) % args['val_freq'] == 0:
-                net.load_state_dict(global_parameters, strict=True)
+                net.load_state_dict(local_parameters, strict=True)
                 sum_accu = 0
                 num = 0
                 for data, label in testDataLoader:
