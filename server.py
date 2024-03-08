@@ -41,13 +41,13 @@ def generate_params():
     binary_operator = "+"
     #binary_operator = "*"
 
-    random_bytes = secrets.token_bytes(4)
+    random_bytes = secrets.token_bytes(6)
     random_number = int.from_bytes(random_bytes, byteorder='big')
     p = nextprime(random_number)  # a large prime number
 
     a = random.randint(1, p)
 
-    g = random.randint(2, 20)  # generator
+    g = random.randint(2, 10)  # generator
 
     if binary_operator == '+':
         G = list(set(range(0, 300, g)))
@@ -131,6 +131,7 @@ if __name__ == "__main__":
         # .state_dict() 将每一层与它的对应参数建立映射关系
         # .item() 取出tensor中的值，变为Python的数据类型
         global_parameters[key] = var.clone()  # clone原来的参数，并且支持梯度回溯
+
 
     for comm_round in range(args['num_comm']):
         print("== Communicate round {} ==".format(comm_round + 1))

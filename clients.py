@@ -347,7 +347,7 @@ class ClientsGroup(object):
             local_data, local_label = np.vstack((data_shards1, data_shards2)), np.vstack((label_shards1, label_shards2))
             local_label = np.argmax(local_label, axis=1)
             someone = Clients(TensorDataset(torch.tensor(local_data), torch.tensor(local_label)),
-                              random.randint(1, 3), self.dev, random.randint(1, Clients.param['p']))
+                              random.randint(1, 3), self.dev, random.randint(1, int(str(Clients.param['p'])[:5])))
             self.clients_set['client{}'.format(i)] = someone
 
     def get_clients(self):
