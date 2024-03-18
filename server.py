@@ -233,11 +233,31 @@ if __name__ == "__main__":
                 summed_values_dict[client] = summed_shared_values
 
 
-            aggregation_model_list = [] # Lw
+
+            aggregation_model_list = [{} for _ in range(args['k_positions'] * Np)] # Lw
+            for list_num in range(len(all_anonymous_model_upload_list)):
+                if list_num == 0:
+                    for gradient_num in range(args['k_positions'] * Np):
+                        for key, var in all_anonymous_model_upload_list[0][gradient_num].items():
+                            aggregation_model_list[gradient_num][key] = var.clone()
+                else:
+                    for gradient_num in range(args['k_positions'] * Np):
+                        for key, var in all_anonymous_model_upload_list[list_num][gradient_num].items():
+                            aggregation_model_list[gradient_num][key] += var.clone()
+
+
+            '''aggregation_model_list = all_anonymous_model_upload_list[0] # Lw
+            for upload_list in all_anonymous_model_upload_list[1:]:
+                for gradient_position in range(len(upload_list)):
+                    for key in upload_list[gradient_position].keys():
+                        aggregation_model_list[gradient_position][key] += upload_list[gradient_position][key]'''
+
+
+            '''aggregation_model_list = [] # Lw
 
             # part 2
             part_2 = {}
-            for layer, model_parameter in global_parameters.items():
+            for layer, model_parameter in global_parameters.ite ms():
                 new_model_parameter = model_parameter.clone() ** (len(u2) - 1)
                 part_2[layer] = new_model_parameter
 
@@ -259,11 +279,12 @@ if __name__ == "__main__":
                         part_3 = myClients.clients_set[client].local_parameters
                         break
 
-                '''try:
-                    index = data_positions.index(item_count) # index is j
-                except ValueError:
-                    print("Couldn't find the index of the element")
-                part_3 = myClients.clients_set["client{}".format(index)].local_parameters'''
+                # try:
+                #     index = data_positions.index(item_count) # index is j
+                # except ValueError:
+                #     print("Couldn't find the index of the element")
+                # part_3 = myClients.clients_set["client{}".format(index)].local_parameters
+
 
                 # Multiply the three above
                 temp_dict = {}
@@ -274,7 +295,7 @@ if __name__ == "__main__":
                         product = part_1 * part_2[layer].clone() * part_3[layer].clone()
                         temp_dict[layer] = product.clone()
 
-                    aggregation_model_list.append(temp_dict)
+                    aggregation_model_list.append(temp_dict)'''
 
 
             # SS.Recon
@@ -290,13 +311,18 @@ if __name__ == "__main__":
             original_model_gradient_list = []
 
             # the right part of the denominator (constant
-            temp_denominator_right = part_2
+            temp_denominator_right = {}
+            for layer, model_parameter in global_parameters.items():
+                new_model_parameter = model_parameter.clone() ** (len(u2) - 1)
+                temp_denominator_right[layer] = new_model_parameter
+
             for item_count in range(1, args['k_positions'] * Np + 1):
 
                 # the left part of the denominator
                 temp_sum = 0
                 for client in u2:
                     temp_sum += myClients.clients_set[client].model_mask + len(u2) * item_count
+
                 if param["b"] == "+":
                     temp_denominator_left = param['g'] * temp_sum
                 elif param["b"] == "*":
@@ -307,9 +333,15 @@ if __name__ == "__main__":
                     original_model_gradient_list.append(0)
                 else:
                     temp_dict = {}
-                    for var in temp_denominator_right.keys():
-                        temp_dict[var] = aggregation_model_list[item_count - 1][var].clone() \
-                                           / (temp_denominator_left * temp_denominator_right[var].clone()) - global_parameters[var].clone()
+                    for key in temp_denominator_right.keys():
+                        # temp_dict[key] = aggregation_model_list[item_count - 1][key].clone() \
+                        #                    / (temp_denominator_left * temp_denominator_right[key].clone()) - global_parameters[key].clone()
+
+                        a=aggregation_model_list[item_count - 1][key].clone()
+                        b=temp_denominator_left
+                        c=temp_denominator_right[key].clone()
+                        d=global_parameters[key].clone()
+                        temp_dict[key] = a/(b*c)-d
 
                     original_model_gradient_list.append(temp_dict)
 
@@ -324,13 +356,13 @@ if __name__ == "__main__":
                     #print("===== Agreement terminated 4 =====")
                     #sys.exit(1)
 
-            for var in temp_denominator_right.keys():
+            for key in temp_denominator_right.keys():
                 for each_parameter in original_model_gradient_list:
                     if each_parameter != 0:
-                        global_parameters[var] += each_parameter[var]
+                        global_parameters[key] += each_parameter[key]
                 number_of_zero_in_original_model_gradient_list = len(original_model_gradient_list)\
                                                                  - original_model_gradient_list.count(0)
-                global_parameters[var] = global_parameters[var] / number_of_zero_in_original_model_gradient_list
+                global_parameters[key] = global_parameters[key] / number_of_zero_in_original_model_gradient_list
 
 
         '''sum_parameters = None
@@ -346,13 +378,13 @@ if __name__ == "__main__":
                 for var in sum_parameters:
                     sum_parameters[var] = sum_parameters[var] + local_parameters[var]
 
-        for var in global_parameters:
-            global_parameters[var] = (sum_parameters[var] / Np)'''
+        for key in global_parameters:
+            global_parameters[key] = (sum_parameters[key] / Np)'''
 
         with torch.no_grad():
-            if 1:
             #if (comm_round + 1) % args['val_freq'] == 0:
-                net.load_state_dict(local_parameters, strict=True)
+            if True:
+                net.load_state_dict(global_parameters, strict=True)
                 sum_accu = 0
                 num = 0
                 for data, label in testDataLoader:
