@@ -157,6 +157,7 @@ if __name__ == "__main__":
             temp_exponent = param['a'] ** (k_plus_Np - len(myClients.clients_set[each_client].request_parameters))
 
             left_side = bilinear_pairing_function(token, verification_information)
+
             if param["b"] == "+":
                 right_side = bilinear_pairing_function(param['g'], param['h'] * temp_exponent)
             elif param["b"] == "*":
@@ -166,7 +167,8 @@ if __name__ == "__main__":
                 print("===== Agreement terminated 1=====")
                 sys.exit(1)
             else:
-                random_mask = random.randint(1, param['p'])
+                #random_mask = random.randint(1, param['p'])
+                random_mask = random.randint(1, int(str(Clients.param['p'])[:4]))
                 # OT.Enc
                 secret_list = []
                 for count in range(args['k_positions'] * Np): # count == n
@@ -180,11 +182,10 @@ if __name__ == "__main__":
                         # Cn
                         if param["b"] == "+":
                             secret_list.append(bilinear_pairing_function(param['g'] * (1 / (param['a'] + count)),
-                                                                         random_mask * param['h']) * data_positions[count])
+                                                                         param['h'] * random_mask) * data_positions[count])
                         elif param["b"] == "*":
                             secret_list.append(bilinear_pairing_function(param['g'] ** (1 / (param['a'] + count)),
-                                                                         random_mask * param['h']) * data_positions[count])
-                    count += 1
+                                                                         param['h'] ** random_mask) * data_positions[count])
 
                 myClients.clients_set[each_client].set_secret_list(secret_list)
                 myClients.clients_set[each_client].decrypt_secret()
@@ -253,11 +254,11 @@ if __name__ == "__main__":
                         aggregation_model_list[gradient_position][key] += upload_list[gradient_position][key]'''
 
 
-            '''aggregation_model_list = [] # Lw
+            aggregation_model_list = [] # Lw
 
             # part 2
             part_2 = {}
-            for layer, model_parameter in global_parameters.ite ms():
+            for layer, model_parameter in global_parameters.items():
                 new_model_parameter = model_parameter.clone() ** (len(u2) - 1)
                 part_2[layer] = new_model_parameter
 
@@ -295,7 +296,7 @@ if __name__ == "__main__":
                         product = part_1 * part_2[layer].clone() * part_3[layer].clone()
                         temp_dict[layer] = product.clone()
 
-                    aggregation_model_list.append(temp_dict)'''
+                    aggregation_model_list.append(temp_dict)
 
 
             # SS.Recon

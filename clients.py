@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import random
 from tqdm import tqdm
-from decimal import Decimal
+from decimal import getcontext, Decimal
 from sympy import symbols, Eq, solve
 from sympy import isprime, nextprime
 from torch.utils.data import TensorDataset
@@ -11,16 +11,17 @@ from getData import GetDataSet
 
 
 
-
-
 def bilinear_pairing_function(a, b):
-    a, b = Decimal(a), Decimal(b)
+    #a, b = Decimal(a), Decimal(b)
     if Clients.param["b"] == "+":
-        result = Clients.param['g'] * (a * b)
+        #result = Clients.param['g'] * (a * b)
+        print(a,b)
+        result = (Clients.param['g'] ** (a * b)) % Clients.param['p']
     elif Clients.param["b"] == "*":
-        result = Clients.param['g'] ** (a * b)
+        #result = Clients.param['g'] ** (a * b)
+        result = (a ** b) % Clients.param['p']
 
-    return float(format(result, ".12e"))
+    return result #float(format(result, ".8e"))
 
 
 def elgamal_encrypt(secret, pubilc_key):
@@ -217,27 +218,32 @@ class Clients(object):
     def decrypt_secret(self):
         # OT.Dec
         self.position_list = []
-        count = 1
-        for Cn in self.secret_list[1:]:
-            temp_sum = sum([element + Clients.param['a'] for element in self.request_parameters])
+        a_plus_ld = [element + Clients.param['a'] for element in self.request_parameters]
+        temp_product = np.prod(a_plus_ld)
+
+        for count in range(1, Clients.k_positions * len(Clients.clients_in_comm)):
+            Cn = self.secret_list[count]
+
             if Clients.param["b"] == "+":
-                sn = Cn * bilinear_pairing_function((-1 / self.client_private_key) * self.secret_list[0],
-                                                    Clients.param['h'] * (temp_sum / (Clients.param['a'] + count)))
+                right_side = Clients.param['h'] * (temp_product / (Clients.param['a'] + count))
+                sn = Cn * bilinear_pairing_function(self.secret_list[0], right_side * (-1 / self.client_private_key))
             elif Clients.param["b"] == "*":
-                sn = Cn * bilinear_pairing_function((-1 / self.client_private_key) * self.secret_list[0],
-                                                    Clients.param['h'] ** (temp_sum / (Clients.param['a'] + count)))
+                right_side = Clients.param['h'] ** (temp_product / (Clients.param['a'] + count))
+                sn = Cn * bilinear_pairing_function(self.secret_list[0], right_side ** (-1 / self.client_private_key))
+
             self.position_list.append(sn)
-            count += 1
+        #print(self.position_list)
 
 
     def generate_anonymous_model_upload_list(self, global_parameters, local_parameters):
         def multiply_tensor(dict, multiplier):
             new_dict = {}
             for key in dict:
-                new_dict[key] = dict[key] * multiplier
+                new_dict[key] = dict[key].clone() * multiplier
             return new_dict
         self.local_parameters = local_parameters
-        self.model_mask = random.randint(1, Clients.param['p'])
+        self.model_mask = random.randint(1, int(str(Clients.param['p'])[:4]))
+        #self.model_mask = random.randint(1, Clients.param['p'])
         random_position = random.choice(self.position_list)
 
         self.anonymous_model_upload_list = []
