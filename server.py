@@ -45,14 +45,15 @@ def generate_params():
     random_number = int.from_bytes(random_bytes, byteorder='big')
     p = nextprime(random_number)  # a large prime number
 
-    a = random.randint(1, p)
+    #a = random.randint(1, p)
+    a = random.randint(1, int(str(p)[:4]))
 
     g = random.randint(2, 10)  # generator
 
     if binary_operator == '+':
-        G = list(set(range(0, 300, g)))
+        G = list(set(range(0, 100, g)))
     if binary_operator == '*':
-        G = [g**i for i in range(20)]
+        G = [g**i for i in range(10)]
 
     h = random.choice(G)
 
@@ -154,7 +155,7 @@ if __name__ == "__main__":
                 myClients.clients_set[each_client].get_token_and_verification_information()
 
             k_plus_Np = args['k_positions'] * len(clients_in_comm)
-            temp_exponent = param['a'] ** (k_plus_Np - len(myClients.clients_set[each_client].request_parameters))
+            temp_exponent = param['a'] * (k_plus_Np - len(myClients.clients_set[each_client].request_parameters))
 
             left_side = bilinear_pairing_function(token, verification_information)
 

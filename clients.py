@@ -8,20 +8,26 @@ from sympy import isprime, nextprime
 from torch.utils.data import TensorDataset
 from torch.utils.data import DataLoader
 from getData import GetDataSet
+from functools import reduce
 
 
 
 def bilinear_pairing_function(a, b):
     #a, b = Decimal(a), Decimal(b)
     if Clients.param["b"] == "+":
-        #result = Clients.param['g'] * (a * b)
-        print(a,b)
-        result = (Clients.param['g'] ** (a * b)) % Clients.param['p']
-    elif Clients.param["b"] == "*":
-        #result = Clients.param['g'] ** (a * b)
-        result = (a ** b) % Clients.param['p']
+        result = Clients.param['g'] * (a * b)
+        #result = pow(Clients.param['g'], a * b, Clients.param['p'])
 
-    return result #float(format(result, ".8e"))
+    elif Clients.param["b"] == "*":
+        result = Clients.param['g'] ** (a * b)
+        #result = pow(a, b, Clients.param['p'])
+
+    threshold = 1e-6
+    round_result = round(result)
+    if abs(result - round_result) > threshold:
+        return result
+    else:
+        return round_result
 
 
 def elgamal_encrypt(secret, pubilc_key):
@@ -195,17 +201,18 @@ class Clients(object):
 
 
     def get_token_and_verification_information(self):
-        temp_sum = sum([element+Clients.param['a'] for element in self.request_parameters])
+        temp_sum_list = [element+Clients.param['a'] for element in self.request_parameters]
+        temp_product = reduce(lambda x, y: x*y, temp_sum_list) # multiply the items in the list
         k_plus_Np = Clients.k_positions * len(Clients.clients_in_comm)
-        temp_exponent = Clients.param['a'] ** (k_plus_Np - len(self.request_parameters))
+        temp_exponent = Clients.param['a'] * (k_plus_Np - len(self.request_parameters))
 
         # OT.Token
         if Clients.param["b"] == "+":
-            token = Clients.param['g'] * (self.client_private_key / temp_sum)  # Toki
-            verification_information = Clients.param['h'] * ((temp_sum * temp_exponent) // self.client_private_key)  # hi
+            token = Clients.param['g'] * (self.client_private_key / temp_product)  # Toki
+            verification_information = Clients.param['h'] * ((temp_product * temp_exponent) / self.client_private_key)  # hi
         elif Clients.param["b"] == "*":
-            token = Clients.param['g'] ** (self.client_private_key / temp_sum)  # Toki
-            verification_information = Clients.param['h'] ** ((temp_sum * temp_exponent) // self.client_private_key)  # hi
+            token = Clients.param['g'] ** (self.client_private_key / temp_product)  # Toki
+            verification_information = Clients.param['h'] ** ((temp_product * temp_exponent) / self.client_private_key)  # hi
 
 
         return token, verification_information, len(self.request_parameters)
@@ -219,7 +226,7 @@ class Clients(object):
         # OT.Dec
         self.position_list = []
         a_plus_ld = [element + Clients.param['a'] for element in self.request_parameters]
-        temp_product = np.prod(a_plus_ld)
+        temp_product = reduce(lambda x, y: x*y, a_plus_ld)
 
         for count in range(1, Clients.k_positions * len(Clients.clients_in_comm)):
             Cn = self.secret_list[count]
@@ -353,7 +360,7 @@ class ClientsGroup(object):
             local_data, local_label = np.vstack((data_shards1, data_shards2)), np.vstack((label_shards1, label_shards2))
             local_label = np.argmax(local_label, axis=1)
             someone = Clients(TensorDataset(torch.tensor(local_data), torch.tensor(local_label)),
-                              random.randint(1, 3), self.dev, random.randint(1, int(str(Clients.param['p'])[:5])))
+                              random.randint(1, 3), self.dev, random.randint(1, int(str(Clients.param['p'])[:8])))
             self.clients_set['client{}'.format(i)] = someone
 
     def get_clients(self):
