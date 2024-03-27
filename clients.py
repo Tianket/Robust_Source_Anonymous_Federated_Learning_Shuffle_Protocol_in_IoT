@@ -10,24 +10,27 @@ from torch.utils.data import DataLoader
 from getData import GetDataSet
 from functools import reduce
 
+def correct_inaccurate_round(float):
+    threshold = 1e-6
+    round_float = round(float)
+    if abs(float - round_float) > threshold:
+        return float
+    else:
+        return round_float
 
 
 def bilinear_pairing_function(a, b):
     #a, b = Decimal(a), Decimal(b)
     if Clients.param["b"] == "+":
-        result = Clients.param['g'] * (a * b)
+        result = (a * b)
+        #result = Clients.param['g'] * (a * b)
         #result = pow(Clients.param['g'], a * b, Clients.param['p'])
 
     elif Clients.param["b"] == "*":
         result = Clients.param['g'] ** (a * b)
         #result = pow(a, b, Clients.param['p'])
 
-    threshold = 1e-6
-    round_result = round(result)
-    if abs(result - round_result) > threshold:
-        return result
-    else:
-        return round_result
+    return correct_inaccurate_round(result)
 
 
 def elgamal_encrypt(secret, pubilc_key):
@@ -233,13 +236,12 @@ class Clients(object):
 
             if Clients.param["b"] == "+":
                 right_side = Clients.param['h'] * (temp_product / (Clients.param['a'] + count))
-                sn = Cn * bilinear_pairing_function(self.secret_list[0], right_side * (-1 / self.client_private_key))
+                sn = Cn / bilinear_pairing_function(self.secret_list[0], right_side * (1 / self.client_private_key))
             elif Clients.param["b"] == "*":
                 right_side = Clients.param['h'] ** (temp_product / (Clients.param['a'] + count))
-                sn = Cn * bilinear_pairing_function(self.secret_list[0], right_side ** (-1 / self.client_private_key))
+                sn = Cn / bilinear_pairing_function(self.secret_list[0], right_side ** (1 / self.client_private_key))
 
-            self.position_list.append(sn)
-        #print(self.position_list)
+            self.position_list.append(correct_inaccurate_round(sn))
 
 
     def generate_anonymous_model_upload_list(self, global_parameters, local_parameters):

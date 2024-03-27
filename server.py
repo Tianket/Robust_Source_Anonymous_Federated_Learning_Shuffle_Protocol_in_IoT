@@ -100,11 +100,12 @@ if __name__ == "__main__":
     data_positions = list(range(1, args['k_positions'] * Np + 1))
     random.shuffle(data_positions)
 
-    private_key = random.randint(1, param['p'])
+    private_key = random.randint(1, int(str(param['p'])[:4]))
     if param["b"] == "+":
         public_key = param['g'] * private_key
     elif param["b"] == "*":
-        public_key = param['g'] ** private_key
+        #public_key = param['g'] ** private_key
+        pass
 
     from clients import ClientsGroup, Clients, bilinear_pairing_function
     Clients.param = param
@@ -169,7 +170,7 @@ if __name__ == "__main__":
                 sys.exit(1)
             else:
                 #random_mask = random.randint(1, param['p'])
-                random_mask = random.randint(1, int(str(Clients.param['p'])[:4]))
+                random_mask = random.randint(1, int(str(param['p'])[:4]))
                 # OT.Enc
                 secret_list = []
                 for count in range(args['k_positions'] * Np): # count == n
