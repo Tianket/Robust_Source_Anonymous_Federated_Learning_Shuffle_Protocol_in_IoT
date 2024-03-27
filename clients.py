@@ -251,7 +251,7 @@ class Clients(object):
                 new_dict[key] = dict[key].clone() * multiplier
             return new_dict
         self.local_parameters = local_parameters
-        self.model_mask = random.randint(1, int(str(Clients.param['p'])[:4]))
+        self.model_mask = random.randint(1, int(str(Clients.param['p'])[:2]))
         #self.model_mask = random.randint(1, Clients.param['p'])
         random_position = random.choice(self.position_list)
 

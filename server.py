@@ -25,8 +25,8 @@ parser.add_argument('-lr', "--learning_rate", type=float, default=0.01, help="le
 parser.add_argument('-vf', "--val_freq", type=int, default=5, help="model validation frequency(of communications)")
 parser.add_argument('-sf', '--save_freq', type=int, default=20, help='global model save frequency(of communication)')
 parser.add_argument('-ncomm', '--num_comm', type=int, default=1000, help='number of communications')
-parser.add_argument('-dr', '--drop_rate', type=float, default=0.1, help='drop rate')
-parser.add_argument('-t', '--threshold', type=float, default=15, help='the minimum number of hosts that can complete the iteration')
+parser.add_argument('-dr', '--drop_rate', type=float, default=0.2, help='drop rate')
+parser.add_argument('-t', '--threshold', type=float, default=5, help='the minimum number of hosts that can complete the iteration')
 
 parser.add_argument('-sp', '--save_path', type=str, default='./checkpoints', help='the saving path of checkpoints')
 parser.add_argument('-iid', '--IID', type=int, default=0, help='the way to allocate data to clients')
@@ -243,62 +243,63 @@ if __name__ == "__main__":
                     for gradient_num in range(args['k_positions'] * Np):
                         for key, var in all_anonymous_model_upload_list[0][gradient_num].items():
                             aggregation_model_list[gradient_num][key] = var.clone()
+
                 else:
                     for gradient_num in range(args['k_positions'] * Np):
                         for key, var in all_anonymous_model_upload_list[list_num][gradient_num].items():
-                            aggregation_model_list[gradient_num][key] += var.clone()
+                            aggregation_model_list[gradient_num][key] *= var.clone()
 
-
-            '''aggregation_model_list = all_anonymous_model_upload_list[0] # Lw
-            for upload_list in all_anonymous_model_upload_list[1:]:
-                for gradient_position in range(len(upload_list)):
-                    for key in upload_list[gradient_position].keys():
-                        aggregation_model_list[gradient_position][key] += upload_list[gradient_position][key]'''
-
-
-            aggregation_model_list = [] # Lw
-
-            # part 2
-            part_2 = {}
-            for layer, model_parameter in global_parameters.items():
-                new_model_parameter = model_parameter.clone() ** (len(u2) - 1)
-                part_2[layer] = new_model_parameter
-
-            for item_count in range(1, args['k_positions'] * Np + 1):
-
-                # part 1
-                temp_sum = 0
-                for client in u2:
-                    temp_sum += myClients.clients_set[client].model_mask + len(u2) * item_count
-                if param["b"] == "+":
-                    part_1 = param['g'] * temp_sum
-                elif param["b"] == "*":
-                    part_1 = param['g'] ** temp_sum
-
-                # part 3
-                part_3 = 0
-                for client in clients_in_comm:
-                    if item_count in myClients.clients_set[client].request_parameters:
-                        part_3 = myClients.clients_set[client].local_parameters
-                        break
-
-                # try:
-                #     index = data_positions.index(item_count) # index is j
-                # except ValueError:
-                #     print("Couldn't find the index of the element")
-                # part_3 = myClients.clients_set["client{}".format(index)].local_parameters
-
-
-                # Multiply the three above
-                temp_dict = {}
-                if part_3 == 0:
-                    aggregation_model_list.append(0)
-                else:
-                    for layer in part_2.keys():
-                        product = part_1 * part_2[layer].clone() * part_3[layer].clone()
-                        temp_dict[layer] = product.clone()
-
-                    aggregation_model_list.append(temp_dict)
+            pass
+            # aggregation_model_list = all_anonymous_model_upload_list[0] # Lw
+            # for upload_list in all_anonymous_model_upload_list[1:]:
+            #     for gradient_position in range(len(upload_list)):
+            #         for key in upload_list[gradient_position].keys():
+            #             aggregation_model_list[gradient_position][key] += upload_list[gradient_position][key]
+            # 
+            # 
+            # aggregation_model_list = [] # Lw
+            #
+            # # part 2
+            # part_2 = {}
+            # for layer, model_parameter in global_parameters.items():
+            #     new_model_parameter = model_parameter.clone() ** (len(u2) - 1)
+            #     part_2[layer] = new_model_parameter
+            #
+            # for item_count in range(1, args['k_positions'] * Np + 1):
+            #
+            #     # part 1
+            #     temp_sum = 0
+            #     for client in u2:
+            #         temp_sum += myClients.clients_set[client].model_mask + len(u2) * item_count
+            #     if param["b"] == "+":
+            #         part_1 = param['g'] * temp_sum
+            #     elif param["b"] == "*":
+            #         part_1 = param['g'] ** temp_sum
+            #
+            #     # part 3
+            #     part_3 = 0
+            #     for client in clients_in_comm:
+            #         if item_count in myClients.clients_set[client].request_parameters:
+            #             part_3 = myClients.clients_set[client].local_parameters
+            #             break
+            #
+            #     # try:
+            #     #     index = data_positions.index(item_count) # index is j
+            #     # except ValueError:
+            #     #     print("Couldn't find the index of the element")
+            #     # part_3 = myClients.clients_set["client{}".format(index)].local_parameters
+            #
+            #
+            #     # Multiply the three above
+            #     temp_dict = {}
+            #     if part_3 == 0:
+            #         aggregation_model_list.append(0)
+            #     else:
+            #         for layer in part_2.keys():
+            #             product = part_1 * part_2[layer].clone() * part_3[layer].clone()
+            #             temp_dict[layer] = product.clone()
+            #
+            #         aggregation_model_list.append(temp_dict)
 
 
             # SS.Recon
