@@ -276,7 +276,7 @@ class Clients(object):
 
     def generate_and_encrypt_shared_values(self, t):
         '''generation'''
-        coefficients = [random.randint(-10, 10) for _ in range(t-1)]
+        coefficients = [random.randint(-10, 10) for _ in range(t-1)] # t个点确定t-1次方程，除了秘密之外还有t-1个系数
         def multiple_equations(highest_degree_of_function, coefficients, x):
             y = 0
             for degree in range(1, highest_degree_of_function):

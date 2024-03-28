@@ -13,7 +13,7 @@ from Models import Mnist_2NN, Mnist_CNN
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter, description="FedAvg")
 parser.add_argument('-g', '--gpu', type=str, default='0', help='gpu id to use(e.g. 0,1,2,3)')
-parser.add_argument('-np', '--num_of_participants', type=int, default=30, help='numer of the clients')
+parser.add_argument('-np', '--num_of_participants', type=int, default=20, help='numer of the clients')
 parser.add_argument('-kp', '--k_positions', type=int, default=2, help='number of positions that each participant can choose')
 
 parser.add_argument('-cf', '--cfraction', type=float, default=0.9, help='C fraction, 0 means 1 client, 1 means total clients')
@@ -25,7 +25,7 @@ parser.add_argument('-lr', "--learning_rate", type=float, default=0.01, help="le
 parser.add_argument('-vf', "--val_freq", type=int, default=5, help="model validation frequency(of communications)")
 parser.add_argument('-sf', '--save_freq', type=int, default=20, help='global model save frequency(of communication)')
 parser.add_argument('-ncomm', '--num_comm', type=int, default=1000, help='number of communications')
-parser.add_argument('-dr', '--drop_rate', type=float, default=0.2, help='drop rate')
+parser.add_argument('-dr', '--drop_rate', type=float, default=0.3, help='drop rate')
 parser.add_argument('-t', '--threshold', type=float, default=5, help='the minimum number of hosts that can complete the iteration')
 
 parser.add_argument('-sp', '--save_path', type=str, default='./checkpoints', help='the saving path of checkpoints')
@@ -249,7 +249,6 @@ if __name__ == "__main__":
                         for key, var in all_anonymous_model_upload_list[list_num][gradient_num].items():
                             aggregation_model_list[gradient_num][key] *= var.clone()
 
-            pass
             # aggregation_model_list = all_anonymous_model_upload_list[0] # Lw
             # for upload_list in all_anonymous_model_upload_list[1:]:
             #     for gradient_position in range(len(upload_list)):
@@ -302,52 +301,56 @@ if __name__ == "__main__":
             #         aggregation_model_list.append(temp_dict)
 
 
-            # SS.Recon
-            sum_of_secrets = 1 # 乘积
-            for i in u3: # 但是之前累加的分享值是u2的主机
-                temp_sum = 0
-                for j in u3[:args['threshold']]: # 选择分享值是从j属于u3中选取，所以用u3截
-                    if ((int(i[6:]) + 1) - (int(j[6:]) + 1)) != 0:
-                        temp_sum += (-(int(j[6:]) + 1) / ((int(i[6:]) + 1) - (int(j[6:]) + 1))) * summed_values_dict[i]
-                sum_of_secrets *= temp_sum
+            def convert_to_num(str):
+                return int(str[6:]) + 1
+
+            sum_of_secrets = 0
+            for i_keys in summed_values_dict.keys():
+                i = convert_to_num(i_keys)
+                product_of_secrets = 1
+                for j_keys in u2:
+                    j = convert_to_num(j_keys)
+                    if i != j:
+                        product_in_j = (-j / (i - j)) * summed_values_dict[i_keys]
+                        product_of_secrets *= product_in_j
+                sum_of_secrets += product_of_secrets
+
 
 
             original_model_gradient_list = []
 
             # the right part of the denominator (constant
             temp_denominator_right = {}
-            for layer, model_parameter in global_parameters.items():
-                new_model_parameter = model_parameter.clone() ** (len(u2) - 1)
-                temp_denominator_right[layer] = new_model_parameter
+            for key, var in global_parameters.items():
+                temp_denominator_right[key] = var.clone() ** (len(u2) - 1)
+
+            summed_model_mask = 0
+            for client in u2:
+                summed_model_mask += myClients.clients_set[client].model_mask
 
             for item_count in range(1, args['k_positions'] * Np + 1):
 
                 # the left part of the denominator
-                temp_sum = 0
-                for client in u2:
-                    temp_sum += myClients.clients_set[client].model_mask + len(u2) * item_count
+                temp_exponent = summed_model_mask + item_count * len(u2)
 
                 if param["b"] == "+":
-                    temp_denominator_left = param['g'] * temp_sum
+                    temp_denominator_left = param['g'] * temp_exponent
                 elif param["b"] == "*":
-                    temp_denominator_left = param['g'] ** temp_sum
+                    temp_denominator_left = param['g'] ** temp_exponent
 
                 # each item in original_model_gradient_list is a model parameters with layers
-                if aggregation_model_list[item_count - 1] == 0:
-                    original_model_gradient_list.append(0)
-                else:
-                    temp_dict = {}
-                    for key in temp_denominator_right.keys():
-                        # temp_dict[key] = aggregation_model_list[item_count - 1][key].clone() \
-                        #                    / (temp_denominator_left * temp_denominator_right[key].clone()) - global_parameters[key].clone()
+                temp_dict = {}
+                for key in temp_denominator_right.keys():
+                    # temp_dict[key] = aggregation_model_list[item_count - 1][key].clone() \
+                    #                    / (temp_denominator_left * temp_denominator_right[key].clone()) - global_parameters[key].clone()
 
-                        a=aggregation_model_list[item_count - 1][key].clone()
-                        b=temp_denominator_left
-                        c=temp_denominator_right[key].clone()
-                        d=global_parameters[key].clone()
-                        temp_dict[key] = a/(b*c)-d
+                    A=aggregation_model_list[item_count - 1][key].clone()
+                    B=temp_denominator_left
+                    C=temp_denominator_right[key].clone()
+                    D=global_parameters[key].clone()
+                    temp_dict[key] = A/(B*C)-D
 
-                    original_model_gradient_list.append(temp_dict)
+                original_model_gradient_list.append(temp_dict)
 
             print("0：{}".format(original_model_gradient_list.count(0)))
             print("非空：{}".format(len(original_model_gradient_list) - original_model_gradient_list.count(0)))
