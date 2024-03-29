@@ -247,8 +247,8 @@ class Clients(object):
     def generate_anonymous_model_upload_list(self, global_parameters, local_parameters):
         def multiply_tensor(dict, multiplier):
             new_dict = {}
-            for key in dict:
-                new_dict[key] = dict[key].clone() * multiplier
+            for key, var in dict.items():
+                new_dict[key] = var.clone() * multiplier
             return new_dict
         self.local_parameters = local_parameters
         self.model_mask = random.randint(1, int(str(Clients.param['p'])[:2]))
@@ -257,7 +257,8 @@ class Clients(object):
 
         self.anonymous_model_upload_list = []
         for count in range(1, Clients.k_positions * len(Clients.clients_in_comm) + 1):
-            if count == random_position:
+            #if count == random_position:
+            if 0:
                 if Clients.param["b"] == "+":
                     item = multiply_tensor(local_parameters, Clients.param['g'] * (self.model_mask + count))
                 elif Clients.param["b"] == "*":
