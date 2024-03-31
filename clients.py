@@ -5,6 +5,7 @@ from tqdm import tqdm
 from decimal import getcontext, Decimal
 from sympy import symbols, Eq, solve
 from sympy import isprime, nextprime
+from torch.nn.utils import clip_grad_norm_
 from torch.utils.data import TensorDataset
 from torch.utils.data import DataLoader
 from getData import GetDataSet
@@ -231,44 +232,37 @@ class Clients(object):
         a_plus_ld = [element + Clients.param['a'] for element in self.request_parameters]
         temp_product = reduce(lambda x, y: x*y, a_plus_ld)
 
-        for count in range(1, Clients.k_positions * len(Clients.clients_in_comm)):
+        for count in range(1, Clients.k_positions * len(Clients.clients_in_comm) + 1):
             Cn = self.secret_list[count]
+            if Cn == 0:
+                self.position_list.append(correct_inaccurate_round(0))
+            else:
+                if Clients.param["b"] == "+":
+                    right_side = Clients.param['h'] * (temp_product / (Clients.param['a'] + count))
+                    sn = Cn / bilinear_pairing_function(self.secret_list[0], right_side * (1 / self.client_private_key))
+                elif Clients.param["b"] == "*":
+                    right_side = Clients.param['h'] ** (temp_product / (Clients.param['a'] + count))
+                    sn = Cn / bilinear_pairing_function(self.secret_list[0], right_side ** (1 / self.client_private_key))
 
-            if Clients.param["b"] == "+":
-                right_side = Clients.param['h'] * (temp_product / (Clients.param['a'] + count))
-                sn = Cn / bilinear_pairing_function(self.secret_list[0], right_side * (1 / self.client_private_key))
-            elif Clients.param["b"] == "*":
-                right_side = Clients.param['h'] ** (temp_product / (Clients.param['a'] + count))
-                sn = Cn / bilinear_pairing_function(self.secret_list[0], right_side ** (1 / self.client_private_key))
-
-            self.position_list.append(correct_inaccurate_round(sn))
+                self.position_list.append(correct_inaccurate_round(sn))
 
 
     def generate_anonymous_model_upload_list(self, global_parameters, local_parameters):
-        def multiply_tensor(dict, multiplier):
-            new_dict = {}
-            for key, var in dict.items():
-                new_dict[key] = var.clone() * multiplier
-            return new_dict
+
         self.local_parameters = local_parameters
         self.model_mask = random.randint(1, int(str(Clients.param['p'])[:2]))
         #self.model_mask = random.randint(1, Clients.param['p'])
-        random_position = random.choice(self.position_list)
+        random_position = self.position_list[random.choice(self.request_parameters) - 1]
 
         self.anonymous_model_upload_list = []
         for count in range(1, Clients.k_positions * len(Clients.clients_in_comm) + 1):
-            #if count == random_position:
-            if 0:
-                if Clients.param["b"] == "+":
-                    item = multiply_tensor(local_parameters, Clients.param['g'] * (self.model_mask + count))
-                elif Clients.param["b"] == "*":
-                    item = multiply_tensor(local_parameters, Clients.param['g'] ** (self.model_mask + count))
+            if count == random_position:
+                item = [Clients.param['g'] ** (self.model_mask + count), local_parameters]
             else:
-                if Clients.param["b"] == "+":
-                    item = multiply_tensor(global_parameters, Clients.param['g'] * (self.model_mask + count))
-                elif Clients.param["b"] == "*":
-                    item = multiply_tensor(global_parameters, Clients.param['g'] ** (self.model_mask + count))
+                item = [Clients.param['g'] ** (self.model_mask + count), global_parameters]
             self.anonymous_model_upload_list.append(item)
+        # Lw = [[g ** (ri+1), Wg], [g ** (ri+2), Wg], [g ** (ri+3), Wg]... [g ** (ri+K·Np), Wg]]
+        # Store folds and gradients separately to avoid out of range
 
 
     def get_anonymous_model_upload_list(self):
