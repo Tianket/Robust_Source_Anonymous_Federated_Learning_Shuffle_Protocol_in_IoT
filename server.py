@@ -22,7 +22,7 @@ parser.add_argument('-cf', '--cfraction', type=float, default=0.9, help='C fract
 parser.add_argument('-E', '--epoch', type=int, default=5, help='local train epoch')
 parser.add_argument('-B', '--batchsize', type=int, default=10, help='local train batch size')
 parser.add_argument('-mn', '--model_name', type=str, default='mnist_2nn', help='the model to train')
-parser.add_argument('-lr', "--learning_rate", type=float, default=0.01, help="learning rate, \
+parser.add_argument('-lr', "--learning_rate", type=float, default=0.02, help="learning rate, \
                     use value from origin paper as default")
 parser.add_argument('-vf', "--val_freq", type=int, default=5, help="model validation frequency(of communications)")
 parser.add_argument('-sf', '--save_freq', type=int, default=20, help='global model save frequency(of communication)')
@@ -122,23 +122,10 @@ if __name__ == "__main__":
 
     global_parameters = {}
     for key, var in net.state_dict().items(): # 将net中的参数保存在字典中（是参数，不是训练梯度）
-        # key,value格式例子：
-        # conv1.weight 	 torch.Size([6, 3, 5, 5])
-        # conv1.bias 	 torch.Size([6])
-        # conv2.weight 	 torch.Size([16, 6, 5, 5])
-        # conv2.bias 	 torch.Size([16])
-        # fc1.weight 	 torch.Size([120, 400])
-        # fc1.bias 	     torch.Size([120])
-        # fc2.weight 	 torch.Size([84, 120])
-        # fc2.bias 	     torch.Size([84])
-
-        # .state_dict() 将每一层与它的对应参数建立映射关系
-        # .item() 取出tensor中的值，变为Python的数据类型
-        global_parameters[key] = var.clone()  # clone原来的参数，并且支持梯度回溯
-
+        global_parameters[key] = var.clone()
 
     for comm_round in range(args['num_comm']):
-        print("== Communicate round {} ==".format(comm_round + 1))
+        print("Communicate round {} ".format(comm_round + 1), end="")
 
         order = np.random.permutation(args['num_of_participants']) # Shuffle the clients
         clients_in_comm = ['client{}'.format(comm_round) for comm_round in order[0:Np]]
@@ -285,8 +272,6 @@ if __name__ == "__main__":
                 sum_of_secrets += product_of_secrets
 
 
-
-
             original_model_gradient_list = []
             # calculate the folds(g) and gradiant(W) separately, then multiply then together
 
@@ -319,9 +304,8 @@ if __name__ == "__main__":
                     else: # not the first time
                         for key, var in each_model_upload_list[item_count - 1][1].items():
                             gradiant_part[key] *= var.clone()
-
-
                 '''Above is the calculation of parts of aggregation_model_list '''
+
                 # each item in original_model_gradient_list is a model parameters with layers
                 temp_dict = {}
                 for key in temp_denominator_right.keys():
@@ -329,9 +313,8 @@ if __name__ == "__main__":
                     temp_result_for_gradient = gradiant_part[key] / temp_denominator_right[key]
                     overall_results = temp_result_for_fold * temp_result_for_gradient - global_parameters[key]
                     temp_dict[key] = torch.nan_to_num(overall_results) # remove nan
-                original_model_gradient_list.append(temp_dict)
 
-                proportion_threshold = 0.5
+                proportion_threshold = 0.85
                 count_of_greater_than_threshold = []
                 target_count = 0
                 total_elements = 0
@@ -340,50 +323,26 @@ if __name__ == "__main__":
                     target_count += torch.sum(var == 0)
                     total_elements += var.numel()
                 proportion = target_count / total_elements
-                print(proportion)
-                '''
                 count_of_greater_than_threshold.append(proportion >= proportion_threshold)
 
                 if torch.tensor(False) in count_of_greater_than_threshold:
                     original_model_gradient_list.append(temp_dict)
                 else:
-                    original_model_gradient_list.append(0)'''
+                    original_model_gradient_list.append(0)
 
-
-            print("0：{}".format(original_model_gradient_list.count(0)))
-            print("非空：{}".format(len(original_model_gradient_list) - original_model_gradient_list.count(0)))
-            print("u2：{}".format(len(u2)))
             if 0 in original_model_gradient_list: # to make sure 0 is in the list, to avoid error
                 if len(original_model_gradient_list) - original_model_gradient_list.count(0) == len(u2):
-                    pass
+
+                    original_model_gradient_list = [x for x in original_model_gradient_list if x != 0]
+                    future_global_parameters = copy.deepcopy(original_model_gradient_list[0])
+                    for each_gradiant in original_model_gradient_list[1:]:
+                        for key, var in each_gradiant.items():
+                            future_global_parameters[key] += var
+                    for key in future_global_parameters.keys():
+                        global_parameters[key] += future_global_parameters[key] / len(u2)
                 else:
-                    pass
-                    #print("===== Agreement terminated 4 =====")
-                    #sys.exit(1)
-
-            future_global_parameters = copy.deepcopy(original_model_gradient_list[0])
-            for each_gradiant in original_model_gradient_list[1:]:
-                for key, var in each_gradiant.items():
-                    future_global_parameters[key] += var
-            for key in future_global_parameters.keys():
-                global_parameters[key] += future_global_parameters[key] / len(u2)
-
-
-        '''sum_parameters = None
-        for client in tqdm(clients_in_comm):
-
-            local_parameters = myClients.clients_set[client].local_update(args['epoch'], args['batchsize'], net,
-                                                                         loss_func, opti, global_parameters)
-            if sum_parameters is None: # First iteration
-                sum_parameters = {}
-                for key, var in local_parameters.items():
-                    sum_parameters[key] = var.clone()
-            else: # Not first iteration
-                for var in sum_parameters:
-                    sum_parameters[var] = sum_parameters[var] + local_parameters[var]
-
-        for key in global_parameters:
-            global_parameters[key] = (sum_parameters[key] / Np)'''
+                    print("===== Agreement terminated 4 =====")
+                    sys.exit(1)
 
         with torch.no_grad():
             #if (comm_round + 1) % args['val_freq'] == 0:
@@ -397,7 +356,7 @@ if __name__ == "__main__":
                     preds = torch.argmax(preds, dim=1)
                     sum_accu += (preds == label).float().mean()
                     num += 1
-                print('accuracy: {}'.format(sum_accu / num))
+                print(' ==> Accuracy: {:.2%}'.format(sum_accu / num))
 
 
     if 0:
