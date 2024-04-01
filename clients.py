@@ -250,7 +250,7 @@ class Clients(object):
     def generate_anonymous_model_upload_list(self, global_parameters, local_parameters):
 
         self.local_parameters = local_parameters
-        self.model_mask = random.randint(1, int(str(Clients.param['p'])[:2]))
+        self.model_mask = random.randint(1, int(str(Clients.param['p'])[:3]))
         #self.model_mask = random.randint(1, Clients.param['p'])
         random_position = self.position_list[random.choice(self.request_parameters) - 1]
 
@@ -271,7 +271,7 @@ class Clients(object):
 
     def generate_and_encrypt_shared_values(self, t):
         '''generation'''
-        coefficients = [random.randint(-10, 10) for _ in range(t-1)] # t个点确定t-1次方程，除了秘密之外还有t-1个系数
+        coefficients = [random.randint(-10, 10) for _ in range(t - 1)] # t个点确定t-1次方程，除了秘密之外还有t-1个系数
         def multiple_equations(highest_degree_of_function, coefficients, x):
             y = 0
             for degree in range(1, highest_degree_of_function):
@@ -280,9 +280,11 @@ class Clients(object):
 
         shared_values = {}
         for each_client in Clients.clients_in_comm:
-            client_number = int(each_client[6:]) + 1
-            shared_values[each_client] = multiple_equations(t-1, coefficients, client_number) + self.model_mask
+            client_number = int(each_client[6:])
+            shared_values[each_client] = multiple_equations(t - 1, coefficients, client_number) + self.model_mask
             # the self.model_mask is the constant s in the function
+
+
 
         '''encryption'''
         self.encrypted_shared_values = {} # {'client24': 365590165707817800, 'client12': 89546683720116...
@@ -308,18 +310,6 @@ class Clients(object):
 
         summed_shared_values = sum(decrypt_values)
         return summed_shared_values
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -358,7 +348,7 @@ class ClientsGroup(object):
             local_label = np.argmax(local_label, axis=1)
             someone = Clients(TensorDataset(torch.tensor(local_data), torch.tensor(local_label)),
                               random.randint(1, 3), self.dev, random.randint(1, int(str(Clients.param['p'])[:8])))
-            self.clients_set['client{}'.format(i)] = someone
+            self.clients_set['client{}'.format(i + 1)] = someone
 
     def get_clients(self):
         return self.clients_set
@@ -375,8 +365,6 @@ class ClientsGroup(object):
                 break
 
 if __name__=="__main__":
-    MyClients = ClientsGroup('mnist', True, 100, 1)
-    print(MyClients.clients_set['client10'].train_ds[0:100])
-    print(MyClients.clients_set['client11'].train_ds[400:500])
+    pass
 
 

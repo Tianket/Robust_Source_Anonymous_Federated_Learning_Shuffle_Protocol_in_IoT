@@ -128,7 +128,7 @@ if __name__ == "__main__":
         print("Communicate round {} ".format(comm_round + 1), end="")
 
         order = np.random.permutation(args['num_of_participants']) # Shuffle the clients
-        clients_in_comm = ['client{}'.format(comm_round) for comm_round in order[0:Np]]
+        clients_in_comm = ['client{}'.format(comm_round + 1) for comm_round in order[0:Np]]
         Clients.clients_in_comm = clients_in_comm # Send to all clients
 
         '''=====数据位置生成阶段====='''
@@ -184,7 +184,7 @@ if __name__ == "__main__":
         '''=====数据匿名收集阶段====='''
         # Round 1
         u1 = clients_in_comm
-        #random.shuffle(u1)
+        random.shuffle(u1)
         for client in u1:
             local_parameters = myClients.clients_set[client].local_update(args['epoch'], args['batchsize'], net,
                                                                          loss_func, opti, global_parameters)
@@ -225,74 +225,37 @@ if __name__ == "__main__":
                 summed_values_dict[client] = summed_shared_values
 
 
-            # aggregation_model_list = copy.deepcopy(all_anonymous_model_upload_list[0])
-            # for each_model_upload_list in all_anonymous_model_upload_list[1:]:
-            #     for each_gradient in range(args['k_positions'] * Np):
-            #         for key, var in each_model_upload_list[each_gradient].items():
-            #             aggregation_model_list[each_gradient][key] *= var.clone()
-
-            # Direct calculate
-            # new_aggregation_model_list = [] # Lw
-            #
-            # # part 2
-            # part_2 = {}
-            # for layer, model_parameter in global_parameters.items():
-            #     part_2[layer] = model_parameter.clone() ** (len(u2))
-            #
-            # for item_count in range(1, args['k_positions'] * Np + 1):
-            #     # part 1
-            #     temp_sum = 0
-            #     for client in u2:
-            #         temp_sum += myClients.clients_set[client].model_mask
-            #     if param["b"] == "+":
-            #         part_1 = param['g'] ** (temp_sum + len(u2) * item_count)
-            #     elif param["b"] == "*":
-            #         part_1 = param['g'] ** (temp_sum + len(u2) * item_count)
-            #
-            #     temp_dict = {}
-            #     for layer in part_2.keys():
-            #         product = float(part_1) * part_2[layer].clone()
-            #         temp_dict[layer] = product.clone()
-            #
-            #     new_aggregation_model_list.append(temp_dict)
-
-
-            def convert_to_num(str):
-                return int(str[6:]) + 1
-
+            # SS.Recon
             sum_of_secrets = 0
-            for i_keys in summed_values_dict.keys():
-                i = convert_to_num(i_keys)
-                product_of_secrets = 1
-                for j_keys in u2:
-                    j = convert_to_num(j_keys)
+            for i_keys in u3:
+                i = int(i_keys[6:])
+                product_of_secrets = summed_values_dict[i_keys]
+                for j_keys in u3:
+                    j = int(j_keys[6:])
                     if i != j:
-                        product_in_j = (-j / (i - j)) * summed_values_dict[i_keys]
+                        product_in_j = (-j / (i - j))
                         product_of_secrets *= product_in_j
                 sum_of_secrets += product_of_secrets
+            sum_of_secrets = round(sum_of_secrets)
 
 
             original_model_gradient_list = []
             # calculate the folds(g) and gradiant(W) separately, then multiply then together
 
-            summed_model_mask = 0
-            for client in u2:
-                summed_model_mask += myClients.clients_set[client].model_mask
-
             # the right part of the denominator (constant
             temp_denominator_right = copy.deepcopy(global_parameters)
-            for times in range(len(u2) - 2):
+            for times in range(len(u2) - 2): # besides the first time above
                 for key, var in global_parameters.items():
                     temp_denominator_right[key] *= var.clone()
 
             for item_count in range(1, args['k_positions'] * Np + 1):
 
                 # the left part of the denominator
-                temp_exponent = summed_model_mask + item_count * len(u2)
+                temp_exponent = sum_of_secrets + item_count * len(u2)
                 temp_denominator_left = param['g'] ** temp_exponent
 
                 '''Below is the calculation of parts of aggregation_model_list '''
-                fold_part = int(1)
+                fold_part = 1
                 gradiant_part = {}
                 for each_model_upload_list in all_anonymous_model_upload_list:
                     #fold_part
@@ -333,7 +296,7 @@ if __name__ == "__main__":
             if 0 in original_model_gradient_list: # to make sure 0 is in the list, to avoid error
                 if len(original_model_gradient_list) - original_model_gradient_list.count(0) == len(u2):
 
-                    original_model_gradient_list = [x for x in original_model_gradient_list if x != 0]
+                    original_model_gradient_list = [x for x in original_model_gradient_list if x != 0] # remove all 0
                     future_global_parameters = copy.deepcopy(original_model_gradient_list[0])
                     for each_gradiant in original_model_gradient_list[1:]:
                         for key, var in each_gradiant.items():
@@ -345,8 +308,7 @@ if __name__ == "__main__":
                     sys.exit(1)
 
         with torch.no_grad():
-            #if (comm_round + 1) % args['val_freq'] == 0:
-            if True:
+            if (comm_round + 1) % args['val_freq'] == 0:
                 net.load_state_dict(global_parameters, strict=True)
                 sum_accu = 0
                 num = 0
