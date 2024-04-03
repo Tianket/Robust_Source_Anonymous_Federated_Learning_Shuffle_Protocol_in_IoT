@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import random
 from tqdm import tqdm
+import math
 from decimal import getcontext, Decimal
 from sympy import symbols, Eq, solve
 from sympy import isprime, nextprime
@@ -23,15 +24,36 @@ def correct_inaccurate_round(float):
 def bilinear_pairing_function(a, b):
     #a, b = Decimal(a), Decimal(b)
     if Clients.param["b"] == "+":
-        result = (a * b)
-        #result = Clients.param['g'] * (a * b)
-        #result = pow(Clients.param['g'], a * b, Clients.param['p'])
+        result = correct_inaccurate_round(a * b)
 
     elif Clients.param["b"] == "*":
-        result = Clients.param['g'] ** (a * b)
+        a_exponent_is_g_raised_to = math.log(a.get_base(), Clients.param['g'])
+        b_exponent_is_g_raised_to = math.log(b.get_base(), Clients.param['g'])
+
+        exponent = correct_inaccurate_round(a.get_exponent() * a_exponent_is_g_raised_to *
+                                            b.get_exponent() * b_exponent_is_g_raised_to)
+
+        result = Power(Clients.param['g'], exponent)
         #result = pow(a, b, Clients.param['p'])
 
-    return correct_inaccurate_round(result)
+    return result
+
+
+def extended_gcd(a, b):
+    if a == 0:
+        return (b, 0, 1)
+    else:
+        g, y, x = extended_gcd(b % a, a)
+        return (g, x - (b // a) * y, y)
+
+
+def mod_inverse(a):
+    # 扩展欧几里得算法（Extended Euclidean Algorithm，EEA）
+    g, x, y = extended_gcd(a, Clients.param['p'])
+    if g != 1:
+        raise Exception('逆元不存在')
+    else:
+        return x % Clients.param['p']
 
 
 def elgamal_encrypt(secret, pubilc_key):
@@ -55,11 +77,59 @@ def elgamal_decrypt(messages, private_key):
         s = (c1 * private_key) % Clients.param['p']
         return c2 - s % Clients.param['p']
     elif Clients.param["b"] == "*":
-        s = c1 ** (Clients.param['p'] - 2) % Clients.param['p']
-        return c2 * s ** private_key % Clients.param['p']
+        s = c1 ** private_key % Clients.param['p']
+        return c2 * mod_inverse(s) % Clients.param['p']
 
 
+class Power():
+    def __init__(self, base, exponent):
+        self.base = base
+        self.exponent = exponent
+    def __str__(self):
+        return f"{self.base} ** {self.exponent}"
+    def __eq__(self, other):
+        if isinstance(other, Power):
+            dividend_exponent_is_g_raised_to = math.log(self.base, Clients.param['g'])
+            divisor_exponent_is_g_raised_to = math.log(other.base, Clients.param['g'])
+            return (correct_inaccurate_round(dividend_exponent_is_g_raised_to * self.exponent) ==
+                    correct_inaccurate_round(divisor_exponent_is_g_raised_to * other.exponent))
+        else:
+            return self.get_result() == other
 
+    def __mul__(self, other):
+        if isinstance(other, Power):
+            dividend_exponent_is_g_raised_to = math.log(self.base, Clients.param['g'])
+            divisor_exponent_is_g_raised_to = math.log(other.base, Clients.param['g'])
+
+            exponent = correct_inaccurate_round(dividend_exponent_is_g_raised_to * self.exponent +
+                                                divisor_exponent_is_g_raised_to * other.exponent)
+            return Power(Clients.param['g'], exponent)
+        else:
+            return self.get_result() * other
+
+    def __truediv__(self, other):
+        if isinstance(other, Power):
+            dividend_exponent_is_g_raised_to = math.log(self.base, Clients.param['g'])
+            divisor_exponent_is_g_raised_to = math.log(other.base, Clients.param['g'])
+
+            exponent = correct_inaccurate_round(dividend_exponent_is_g_raised_to * self.exponent -
+                                                divisor_exponent_is_g_raised_to * other.exponent)
+            return Power(Clients.param['g'], exponent)
+        else:
+            return self.get_result() / other
+
+    def __pow__(self, other):
+        if isinstance(other, Power):
+            raise TypeError("Too huge!!!")
+        else:
+            return Power(self.base, self.exponent * other)
+
+    def get_base(self):
+        return self.base
+    def get_exponent(self):
+        return self.exponent
+    def get_result(self):
+        return pow(self.base, self.exponent)
 
 class Clients(object):
     param = {}
@@ -136,7 +206,7 @@ class Clients(object):
         request_parameters, request_collection = self.take_out_from_request_collection(request_collection)
         self.request_parameters = request_parameters
 
-        b = random.randint(1, 50) # b belongs to set Z
+        b = random.randint(2, 10) # b belongs to set Z
         total_public_parameters = 0
         for each_client in Clients.clients_in_comm:
             total_public_parameters += Clients.clients_set[each_client].public_parameter
@@ -144,7 +214,8 @@ class Clients(object):
         if Clients.param["b"] == "+":
             timestep = Clients.param['g'] * (b * (total_public_parameters - self.public_parameter))
         elif Clients.param["b"] == "*":
-            timestep = Clients.param['g'] ** (b * (total_public_parameters - self.public_parameter))
+            timestep = pow(Clients.param['g'], (b * (total_public_parameters - self.public_parameter)))
+            #timestep = Decimal(timestep)
 
 
         # iii
@@ -183,7 +254,7 @@ class Clients(object):
         if Clients.param["b"] == "+":
             timestep = timestep - gb * self.public_parameter
         elif Clients.param["b"] == "*":
-            timestep = timestep / gb ** self.public_parameter
+            timestep, decimal = divmod(timestep, gb ** self.public_parameter)
 
         # iv
         next_client_public_key = 0
@@ -215,9 +286,8 @@ class Clients(object):
             token = Clients.param['g'] * (self.client_private_key / temp_product)  # Toki
             verification_information = Clients.param['h'] * ((temp_product * temp_exponent) / self.client_private_key)  # hi
         elif Clients.param["b"] == "*":
-            token = Clients.param['g'] ** (self.client_private_key / temp_product)  # Toki
-            verification_information = Clients.param['h'] ** ((temp_product * temp_exponent) / self.client_private_key)  # hi
-
+            token = Power(Clients.param['g'], self.client_private_key / temp_product)  # Toki
+            verification_information = Power(Clients.param['h'], (temp_product * temp_exponent) / self.client_private_key)
 
         return token, verification_information, len(self.request_parameters)
 
@@ -241,10 +311,11 @@ class Clients(object):
                     right_side = Clients.param['h'] * (temp_product / (Clients.param['a'] + count))
                     sn = Cn / bilinear_pairing_function(self.secret_list[0], right_side * (1 / self.client_private_key))
                 elif Clients.param["b"] == "*":
-                    right_side = Clients.param['h'] ** (temp_product / (Clients.param['a'] + count))
-                    sn = Cn / bilinear_pairing_function(self.secret_list[0], right_side ** (1 / self.client_private_key))
+                    right_side_and_exponent = Power(Clients.param['h'],
+                                                    (-1 / self.client_private_key) * temp_product / (Clients.param['a'] + count))
+                    sn = bilinear_pairing_function(self.secret_list[0], right_side_and_exponent) * Cn[0] * Cn[1]
 
-                self.position_list.append(correct_inaccurate_round(sn))
+                self.position_list.append(sn)
 
 
     def generate_anonymous_model_upload_list(self, global_parameters, local_parameters):
@@ -256,10 +327,17 @@ class Clients(object):
 
         self.anonymous_model_upload_list = []
         for count in range(1, Clients.k_positions * len(Clients.clients_in_comm) + 1):
-            if count == random_position:
-                item = [Clients.param['g'] ** (self.model_mask + count), local_parameters]
-            else:
-                item = [Clients.param['g'] ** (self.model_mask + count), global_parameters]
+            if Clients.param["b"] == "+":
+                if count == random_position:
+                    item = [Clients.param['g'] ** (self.model_mask + count), local_parameters]
+                else:
+                    item = [Clients.param['g'] ** (self.model_mask + count), global_parameters]
+            elif Clients.param["b"] == "*":
+                if count == random_position:
+                    item = [Power(Clients.param['g'], (self.model_mask + count)), local_parameters]
+                else:
+                    item = [Power(Clients.param['g'], (self.model_mask + count)), global_parameters]
+
             self.anonymous_model_upload_list.append(item)
         # Lw = [[g ** (ri+1), Wg], [g ** (ri+2), Wg], [g ** (ri+3), Wg]... [g ** (ri+K·Np), Wg]]
         # Store folds and gradients separately to avoid out of range
@@ -337,7 +415,9 @@ class ClientsGroup(object):
 
         shard_size = mnistDataSet.train_data_size // self.num_of_clients // 2
         shards_id = np.random.permutation(mnistDataSet.train_data_size // shard_size)
-        for i in range(self.num_of_clients):
+
+        print("Clients generating: ")
+        for i in tqdm(range(self.num_of_clients)):
             shards_id1 = shards_id[i * 2]
             shards_id2 = shards_id[i * 2 + 1]
             data_shards1 = train_data[shards_id1 * shard_size: shards_id1 * shard_size + shard_size]
@@ -347,7 +427,7 @@ class ClientsGroup(object):
             local_data, local_label = np.vstack((data_shards1, data_shards2)), np.vstack((label_shards1, label_shards2))
             local_label = np.argmax(local_label, axis=1)
             someone = Clients(TensorDataset(torch.tensor(local_data), torch.tensor(local_label)),
-                              random.randint(1, 3), self.dev, random.randint(1, int(str(Clients.param['p'])[:8])))
+                              random.randint(2, 9), self.dev, random.randint(1, int(str(Clients.param['p'])[:4])))
             self.clients_set['client{}'.format(i + 1)] = someone
 
     def get_clients(self):
@@ -361,7 +441,7 @@ class ClientsGroup(object):
 
         while True:
             next_client, returns = self.clients_set[next_client].round1_other_clients(*returns)
-            if next_client == 0:  # round 1 all done! Time for position selecting
+            if returns == 0:  # round 1 all done! Time for position selecting
                 break
 
 if __name__=="__main__":

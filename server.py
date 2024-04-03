@@ -22,7 +22,7 @@ parser.add_argument('-cf', '--cfraction', type=float, default=0.9, help='C fract
 parser.add_argument('-E', '--epoch', type=int, default=5, help='local train epoch')
 parser.add_argument('-B', '--batchsize', type=int, default=10, help='local train batch size')
 parser.add_argument('-mn', '--model_name', type=str, default='mnist_2nn', help='the model to train')
-parser.add_argument('-lr', "--learning_rate", type=float, default=0.02, help="learning rate, \
+parser.add_argument('-lr', "--learning_rate", type=float, default=0.005, help="learning rate, \
                     use value from origin paper as default")
 parser.add_argument('-vf', "--val_freq", type=int, default=5, help="model validation frequency(of communications)")
 parser.add_argument('-sf', '--save_freq', type=int, default=20, help='global model save frequency(of communication)')
@@ -50,12 +50,12 @@ def generate_params():
     #a = random.randint(1, p)
     a = random.randint(1, int(str(p)[:4]))
 
-    g = random.randint(2, 10)  # generator
+    g = random.randint(2, 5)  # generator
 
     if binary_operator == '+':
         G = list(set(range(0, 100, g)))
     if binary_operator == '*':
-        G = [g**i for i in range(10)]
+        G = [g**i for i in range(9)]
 
     h = random.choice(G)
 
@@ -96,20 +96,18 @@ if __name__ == "__main__":
 
     # for clients.py
     param = generate_params()
-    print("===== Params generation completed =====")
 
     Np = int(max(args['num_of_participants'] * args['cfraction'], 1))  # number in communication
     data_positions = list(range(1, args['k_positions'] * Np + 1))
     random.shuffle(data_positions)
 
-    private_key = random.randint(1, int(str(param['p'])[:4]))
-    if param["b"] == "+":
-        public_key = param['g'] * private_key
-    elif param["b"] == "*":
-        #public_key = param['g'] ** private_key
-        pass
+    # private_key = random.randint(1, int(str(param['p'])[:4]))
+    # if param["b"] == "+":
+    #     public_key = param['g'] * private_key
+    # elif param["b"] == "*":
+    #     public_key = param['g'] ** private_key
 
-    from clients import ClientsGroup, Clients, bilinear_pairing_function
+    from clients import ClientsGroup, Clients, bilinear_pairing_function, Power
     Clients.param = param
     Clients.k_positions = args['k_positions']
 
@@ -117,8 +115,6 @@ if __name__ == "__main__":
     testDataLoader = myClients.test_data_loader
     clients_set = myClients.get_clients()
     Clients.clients_set = clients_set
-    print("===== Clients generation completed =====\n")
-
 
     global_parameters = {}
     for key, var in net.state_dict().items(): # 将net中的参数保存在字典中（是参数，不是训练梯度）
@@ -152,7 +148,7 @@ if __name__ == "__main__":
             if param["b"] == "+":
                 right_side = bilinear_pairing_function(param['g'], param['h'] * temp_exponent)
             elif param["b"] == "*":
-                right_side = bilinear_pairing_function(param['g'], param['h'] ** temp_exponent)
+                right_side = bilinear_pairing_function(Power(param['g'], 1), Power(param['h'], temp_exponent))
 
             if left_side != right_side: # 双线性配对函数 bilinear pairing function
                 print("===== Agreement terminated 1=====")
@@ -175,8 +171,8 @@ if __name__ == "__main__":
                             secret_list.append(bilinear_pairing_function(param['g'] * (1 / (param['a'] + count)),
                                                                          param['h'] * random_mask) * data_positions[count - 1])
                         elif param["b"] == "*":
-                            secret_list.append(bilinear_pairing_function(param['g'] ** (1 / (param['a'] + count)),
-                                                                         param['h'] ** random_mask) * data_positions[count - 1])
+                            secret_list.append([bilinear_pairing_function(Power(param['g'], (1 / (param['a'] + count))),
+                                                                         Power(param['h'], random_mask)), data_positions[count - 1]])
 
                 myClients.clients_set[each_client].set_secret_list(secret_list)
                 myClients.clients_set[each_client].decrypt_secret()
@@ -242,6 +238,10 @@ if __name__ == "__main__":
             original_model_gradient_list = []
             # calculate the folds(g) and gradiant(W) separately, then multiply then together
 
+            summed_model_mask = 0
+            for client in u2:
+                summed_model_mask += myClients.clients_set[client].model_mask
+
             # the right part of the denominator (constant
             temp_denominator_right = copy.deepcopy(global_parameters)
             for times in range(len(u2) - 2): # besides the first time above
@@ -252,10 +252,10 @@ if __name__ == "__main__":
 
                 # the left part of the denominator
                 temp_exponent = sum_of_secrets + item_count * len(u2)
-                temp_denominator_left = param['g'] ** temp_exponent
+                temp_denominator_left = Power(param['g'], temp_exponent)
 
                 '''Below is the calculation of parts of aggregation_model_list '''
-                fold_part = 1
+                fold_part = Power(param['g'], 0)
                 gradiant_part = {}
                 for each_model_upload_list in all_anonymous_model_upload_list:
                     #fold_part
@@ -272,7 +272,7 @@ if __name__ == "__main__":
                 # each item in original_model_gradient_list is a model parameters with layers
                 temp_dict = {}
                 for key in temp_denominator_right.keys():
-                    temp_result_for_fold = fold_part / temp_denominator_left
+                    temp_result_for_fold = (fold_part / temp_denominator_left).get_result()
                     temp_result_for_gradient = gradiant_part[key] / temp_denominator_right[key]
                     overall_results = temp_result_for_fold * temp_result_for_gradient - global_parameters[key]
                     temp_dict[key] = torch.nan_to_num(overall_results) # remove nan
