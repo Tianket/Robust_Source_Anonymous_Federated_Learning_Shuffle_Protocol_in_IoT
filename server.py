@@ -15,7 +15,7 @@ from Models import Mnist_2NN, Mnist_CNN
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter, description="FedAvg")
 parser.add_argument('-g', '--gpu', type=str, default='0', help='gpu id to use(e.g. 0,1,2,3)')
-parser.add_argument('-np', '--num_of_participants', type=int, default=20, help='numer of the clients')
+parser.add_argument('-np', '--num_of_participants', type=int, default=30, help='numer of the clients')
 parser.add_argument('-kp', '--k_positions', type=int, default=2, help='number of positions that each participant can choose')
 
 parser.add_argument('-cf', '--cfraction', type=float, default=0.9, help='C fraction, 0 means 1 client, 1 means total clients')
@@ -24,7 +24,7 @@ parser.add_argument('-B', '--batchsize', type=int, default=10, help='local train
 parser.add_argument('-mn', '--model_name', type=str, default='mnist_2nn', help='the model to train')
 parser.add_argument('-lr', "--learning_rate", type=float, default=0.005, help="learning rate, \
                     use value from origin paper as default")
-parser.add_argument('-vf', "--val_freq", type=int, default=5, help="model validation frequency(of communications)")
+parser.add_argument('-vf', "--val_freq", type=int, default=1, help="model validation frequency(of communications)")
 parser.add_argument('-sf', '--save_freq', type=int, default=20, help='global model save frequency(of communication)')
 parser.add_argument('-ncomm', '--num_comm', type=int, default=1000, help='number of communications')
 parser.add_argument('-dr', '--drop_rate', type=float, default=0.3, help='drop rate')
@@ -40,8 +40,8 @@ def test_mkdir(path):
         os.mkdir(path)
 
 def generate_params():
-    binary_operator = "+"
-    #binary_operator = "*"
+    #binary_operator = "+"
+    binary_operator = "*"
 
     random_bytes = secrets.token_bytes(6)
     random_number = int.from_bytes(random_bytes, byteorder='big')
@@ -238,10 +238,6 @@ if __name__ == "__main__":
             original_model_gradient_list = []
             # calculate the folds(g) and gradiant(W) separately, then multiply then together
 
-            summed_model_mask = 0
-            for client in u2:
-                summed_model_mask += myClients.clients_set[client].model_mask
-
             # the right part of the denominator (constant
             temp_denominator_right = copy.deepcopy(global_parameters)
             for times in range(len(u2) - 2): # besides the first time above
@@ -252,10 +248,16 @@ if __name__ == "__main__":
 
                 # the left part of the denominator
                 temp_exponent = sum_of_secrets + item_count * len(u2)
-                temp_denominator_left = Power(param['g'], temp_exponent)
+                if Clients.param["b"] == "+":
+                    temp_denominator_left = param['g'] ** temp_exponent
+                elif Clients.param["b"] == "*":
+                    temp_denominator_left = Power(param['g'], temp_exponent)
 
                 '''Below is the calculation of parts of aggregation_model_list '''
-                fold_part = Power(param['g'], 0)
+                if Clients.param["b"] == "+":
+                    fold_part = 1
+                elif Clients.param["b"] == "*":
+                    fold_part = Power(param['g'], 0)
                 gradiant_part = {}
                 for each_model_upload_list in all_anonymous_model_upload_list:
                     #fold_part
@@ -272,12 +274,12 @@ if __name__ == "__main__":
                 # each item in original_model_gradient_list is a model parameters with layers
                 temp_dict = {}
                 for key in temp_denominator_right.keys():
-                    temp_result_for_fold = (fold_part / temp_denominator_left).get_result()
+                    temp_result_for_fold = (fold_part / temp_denominator_left) * 1
                     temp_result_for_gradient = gradiant_part[key] / temp_denominator_right[key]
                     overall_results = temp_result_for_fold * temp_result_for_gradient - global_parameters[key]
                     temp_dict[key] = torch.nan_to_num(overall_results) # remove nan
 
-                proportion_threshold = 0.85
+                proportion_threshold = 0.6
                 count_of_greater_than_threshold = []
                 target_count = 0
                 total_elements = 0

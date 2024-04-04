@@ -64,8 +64,9 @@ def elgamal_encrypt(secret, pubilc_key):
         c1 = (Clients.param['g'] * k) % Clients.param['p']
         c2 = (pubilc_key * k + secret) % Clients.param['p']
     elif Clients.param["b"] == "*":
-        c1 = (Clients.param['g'] ** k) % Clients.param['p']
-        c2 = (pubilc_key ** k * secret) % Clients.param['p']
+        c1 = pow(Clients.param['g'], k, Clients.param['p'])
+        s = pow(pubilc_key, k, Clients.param['p'])
+        c2 = (s * secret) % Clients.param['p']
 
     return [c1, c2]
 
@@ -75,10 +76,14 @@ def elgamal_decrypt(messages, private_key):
 
     if Clients.param["b"] == "+":
         s = (c1 * private_key) % Clients.param['p']
-        return c2 - s % Clients.param['p']
+        result = (c2 - s) % Clients.param['p']
     elif Clients.param["b"] == "*":
-        s = c1 ** private_key % Clients.param['p']
-        return c2 * mod_inverse(s) % Clients.param['p']
+        s = pow(c1, private_key, Clients.param['p'])
+        result = c2 * pow(s, -1, Clients.param['p']) % Clients.param['p']
+
+    if result > Clients.param['p'] // 2:
+        result -= Clients.param['p']
+    return correct_inaccurate_round(result)
 
 
 class Power():
@@ -315,7 +320,7 @@ class Clients(object):
                                                     (-1 / self.client_private_key) * temp_product / (Clients.param['a'] + count))
                     sn = bilinear_pairing_function(self.secret_list[0], right_side_and_exponent) * Cn[0] * Cn[1]
 
-                self.position_list.append(sn)
+                self.position_list.append(correct_inaccurate_round(sn))
 
 
     def generate_anonymous_model_upload_list(self, global_parameters, local_parameters):
@@ -361,7 +366,6 @@ class Clients(object):
             client_number = int(each_client[6:])
             shared_values[each_client] = multiple_equations(t - 1, coefficients, client_number) + self.model_mask
             # the self.model_mask is the constant s in the function
-
 
 
         '''encryption'''
@@ -416,7 +420,7 @@ class ClientsGroup(object):
         shard_size = mnistDataSet.train_data_size // self.num_of_clients // 2
         shards_id = np.random.permutation(mnistDataSet.train_data_size // shard_size)
 
-        print("Clients generating: ")
+        print("\nGenerating Clients...")
         for i in tqdm(range(self.num_of_clients)):
             shards_id1 = shards_id[i * 2]
             shards_id2 = shards_id[i * 2 + 1]
@@ -427,7 +431,7 @@ class ClientsGroup(object):
             local_data, local_label = np.vstack((data_shards1, data_shards2)), np.vstack((label_shards1, label_shards2))
             local_label = np.argmax(local_label, axis=1)
             someone = Clients(TensorDataset(torch.tensor(local_data), torch.tensor(local_label)),
-                              random.randint(2, 9), self.dev, random.randint(1, int(str(Clients.param['p'])[:4])))
+                              random.randint(2, 9), self.dev, random.randint(1, int(str(Clients.param['p'])[:8])))
             self.clients_set['client{}'.format(i + 1)] = someone
 
     def get_clients(self):
